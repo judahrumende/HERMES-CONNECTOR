@@ -1,0 +1,263 @@
+import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import {
+  Activity, AlertCircle, ArrowRight, Bell, Bot, Check, ChevronLeft, ChevronRight,
+  Camera, Circle, CornerDownLeft, Database, Image as ImageIcon, Inbox, LayoutDashboard, ListFilter,
+  ListChecks, Menu, MessageSquare, Mic, Minimize2, Network, Paperclip, Pencil, Plus, RefreshCw, Search, Send,
+  Settings, ShieldCheck, Sparkles, UserPlus, Users, X, Zap,
+} from 'lucide-react';
+import './convos-app.css';
+
+type View = 'overview' | 'setup' | 'messages' | 'work' | 'agents' | 'knowledge' | 'approvals' | 'settings';
+type Status = 'live' | 'idle' | 'blocked' | 'draft';
+type Kind = 'directive' | 'task' | 'role' | 'source' | 'connection' | 'job' | null;
+type Gateway = { status: 'loading' | 'bridge_offline' | 'not_configured' | 'unknown' | 'offline' | 'online'; base_url?: string | null; checked_at?: string | null; models?: unknown; jobs?: unknown; error?: string | null };
+type Task = { id: string; title: string; area: string; state: Status };
+type Role = { id: string; name: string; role: string; initials: string };
+type Source = { id: string; title: string; detail: string };
+type Event = { type: string; at?: string; data?: Record<string, unknown> };
+
+const taskSeed: Task[] = [
+  { id: 'gateway', title: 'Connect Hermes Gateway', area: 'Infrastructure', state: 'blocked' },
+  { id: 'storage', title: 'Choose persistent work storage', area: 'Architecture', state: 'draft' },
+  { id: 'approval', title: 'Define approval boundaries', area: 'Governance', state: 'draft' },
+  { id: 'profiles', title: 'Synchronise Hermes profiles', area: 'Organisation', state: 'idle' },
+];
+const roleSeed: Role[] = [
+  { id: 'ceo', name: 'CEO', role: 'Strategy and orchestration', initials: 'HJ' },
+  { id: 'chief', name: 'Chief of Staff', role: 'Operations and follow-through', initials: 'CS' },
+  { id: 'research', name: 'Research', role: 'Evidence and synthesis', initials: 'RR' },
+  { id: 'growth', name: 'Growth', role: 'Distribution and experiments', initials: 'GR' },
+];
+const sourceSeed: Source[] = [
+  { id: 'obsidian', title: 'Obsidian vault', detail: 'Not configured' },
+  { id: 'graph', title: 'Graph knowledge', detail: 'Graphify not configured' },
+  { id: 'docs', title: 'Organisation documents', detail: 'No storage provider' },
+];
+const nav: Array<{ id: View; label: string; icon: React.ElementType }> = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'setup', label: 'Steps to do', icon: ListChecks }, { id: 'messages', label: 'Messages', icon: MessageSquare },
+  { id: 'work', label: 'Work', icon: Inbox }, { id: 'agents', label: 'Agents', icon: Bot },
+  { id: 'knowledge', label: 'Knowledge', icon: Database }, { id: 'approvals', label: 'Approvals', icon: ShieldCheck },
+];
+
+function useStored<T>(key: string, initial: T) {
+  const [value, setValue] = useState<T>(() => { try { return JSON.parse(localStorage.getItem(key) || '') as T; } catch { return initial; } });
+  useEffect(() => { localStorage.setItem(key, JSON.stringify(value)); }, [key, value]);
+  return [value, setValue] as const;
+}
+
+function useHermes() {
+  const [status, setStatus] = useState<Gateway>({ status: 'loading' });
+  const [events, setEvents] = useState<Event[]>([]);
+  const request = async (url: string, options?: RequestInit) => {
+    const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(body.detail || `Request failed (${response.status})`);
+    return body;
+  };
+  const refresh = async () => { try { setStatus(await request('/api/hermes/refresh', { method: 'POST' })); } catch { setStatus(s => ({ ...s, status: 'bridge_offline', error: 'Start the Hermes Jarvis server to enable connections.' })); } };
+  useEffect(() => {
+    request('/api/hermes/status').then(setStatus).catch(() => setStatus({ status: 'bridge_offline', error: 'Start the Hermes Jarvis server to enable connections.' }));
+    const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/live`);
+    socket.onmessage = e => { try { const item = JSON.parse(e.data); setEvents(old => [item, ...old].slice(0, 100)); if (item.type.startsWith('connection.')) setStatus(item.data); } catch { /* upstream data was malformed */ } };
+    return () => socket.close();
+  }, []);
+  return { status, events, refresh,
+    configure: async (base_url: string) => { const value = await request('/api/hermes/connection', { method: 'PUT', body: JSON.stringify({ base_url }) }); setStatus(value); },
+    run: (input: string, session_id: string) => request('/api/hermes/runs', { method: 'POST', body: JSON.stringify({ payload: { input, session_id } }) }),
+    job: (payload: Record<string, string>) => request('/api/hermes/jobs', { method: 'POST', body: JSON.stringify({ payload }) }),
+  };
+}
+
+export default function FinishedApp({ landing }: { landing: (onEnter: () => void) => React.ReactNode }) {
+  const [inside, setInside] = useStored('hermes.inside.v2', false);
+  return inside ? <Centre onExit={() => setInside(false)} /> : <>{landing(() => setInside(true))}</>;
+}
+
+function Centre({ onExit }: { onExit: () => void }) {
+  const hermes = useHermes();
+  const [view, setView] = useStored<View>('hermes.view', 'overview');
+  const [activeRole, setActiveRole] = useStored('hermes.active.role', 'ceo');
+  const [tasks, setTasks] = useStored<Task[]>('hermes.tasks', taskSeed);
+  const [roles, setRoles] = useStored<Role[]>('hermes.roles', roleSeed);
+  const [sources, setSources] = useStored<Source[]>('hermes.sources', sourceSeed);
+  const [setupDone, setSetupDone] = useStored<string[]>('hermes.setup.completed', []);
+  const [dialog, setDialog] = useState<Kind>(null), [search, setSearch] = useState(false), [notes, setNotes] = useState(false), [agent, setAgent] = useState(false), [menu, setMenu] = useState(false);
+  useEffect(() => { const fn = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearch(true); } if (e.key === 'Escape') { setSearch(false); setNotes(false); setDialog(null); } }; addEventListener('keydown', fn); return () => removeEventListener('keydown', fn); }, []);
+  const goSettings = () => setView('settings');
+  const openThread = (id: string) => { setActiveRole(id); setView('messages'); setMenu(false); };
+  return <div className="command-app convos-command"><aside className={`app-sidebar convos-sidebar ${menu ? 'mobile-open' : ''}`}><header className="convos-brand"><button className="brand-button" onClick={() => setView('overview')}><span className="brand-orb" /><strong>Hermes</strong></button><button className="icon-button" aria-label="Close navigation" onClick={() => setMenu(false)}><X size={20} /></button></header><button className="command-search" onClick={() => setSearch(true)}><Search size={17} /><span>Search Hermes</span><kbd>⌘ K</kbd></button><nav aria-label="Command centre"><span className="nav-label">Command centre</span>{nav.map(item => <Nav key={item.id} {...item} active={view === item.id} onClick={() => { setView(item.id); setMenu(false); }} />)}<span className="nav-label nav-label-spaced">System</span><Nav id="settings" label="Settings" icon={Settings} active={view === 'settings'} onClick={() => { goSettings(); setMenu(false); }} /></nav><div className="sidebar-spacer" /><button className="sidebar-connection" onClick={goSettings}><span className={`status-dot ${tone(hermes.status)}`} /><div><strong>{statusText(hermes.status)}</strong><small>{hermes.status.base_url || 'Local-only workspace'}</small></div></button><button className="new-convo-button" onClick={() => setDialog('directive')}><Pencil size={17} /> New directive</button><button className="profile-switcher" onClick={onExit}><span className="identity-avatar">JR</span><span><strong>Judah Rumende</strong><small>Return to company site</small></span></button></aside>
+    <main className={`app-main view-${view}`}><header className="app-topbar"><div className="mobile-brand"><button className="icon-button" aria-label="Open navigation" onClick={() => setMenu(true)}><Menu size={22} /></button><span className="brand-orb" /><strong>{view === 'overview' ? 'Hermes' : view === 'messages' ? roles.find(role => role.id === activeRole)?.name || 'Messages' : nav.find(n => n.id === view)?.label || 'Settings'}</strong></div><div className="breadcrumbs"><span>Hermes</span><ChevronRight size={12} /><strong>{view === 'settings' ? 'Settings' : nav.find(n => n.id === view)?.label}</strong></div><div className="topbar-actions"><button className="icon-button" aria-label="Search" onClick={() => setSearch(true)}><Search size={17} /></button><button className="icon-button" aria-label="Notifications" onClick={() => setNotes(v => !v)}><Bell size={17} /></button><button className="button button-quiet" onClick={() => setAgent(true)}><Sparkles size={15} /> Activity</button><button className="identity-avatar" aria-label="Return to landing page" onClick={onExit}>JR</button></div></header><div className="app-view">
+      {view === 'overview' && <ConvoHome gateway={hermes.status} events={hermes.events} roles={roles} openThread={openThread} go={setView} newDirective={() => setDialog('directive')} />}
+      {view === 'setup' && <SetupGuide gateway={hermes.status} completed={setupDone} setCompleted={setSetupDone} configure={() => setDialog('connection')} createJob={() => setDialog('job')} refresh={hermes.refresh} go={setView} />}
+      {view === 'messages' && <Messages gateway={hermes.status} roles={roles} activeRole={activeRole} setActiveRole={setActiveRole} closeThread={() => setView('overview')} run={hermes.run} settings={goSettings} addRole={() => setDialog('role')} />}
+      {view === 'work' && <Work tasks={tasks} setTasks={setTasks} add={() => setDialog('task')} />}
+      {view === 'agents' && <Agents roles={roles} gateway={hermes.status} add={() => setDialog('role')} />}
+      {view === 'knowledge' && <Knowledge sources={sources} add={() => setDialog('source')} />}
+      {view === 'approvals' && <Approvals settings={goSettings} />}
+      {view === 'settings' && <SettingsView gateway={hermes.status} refresh={hermes.refresh} configure={() => setDialog('connection')} job={() => setDialog('job')} />}
+    </div></main><nav className="mobile-app-nav" aria-label="Mobile command centre"><button className={view === 'overview' ? 'active' : ''} onClick={() => setView('overview')}><MessageSquare size={20} /><span>Convos</span></button><button className={view === 'setup' ? 'active' : ''} onClick={() => setView('setup')}><ListChecks size={20} /><span>Steps</span></button><button className="mobile-compose" onClick={() => setDialog('directive')} aria-label="New directive"><Pencil size={20} /></button><button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}><Inbox size={20} /><span>Work</span></button><button className={view === 'settings' ? 'active' : ''} onClick={goSettings}><Settings size={20} /><span>More</span></button></nav>
+    {menu && <button className="mobile-menu-scrim" aria-label="Close navigation" onClick={() => setMenu(false)} />}
+    {agent && <AgentPanel gateway={hermes.status} events={hermes.events} close={() => setAgent(false)} />}
+    {notes && <Popover title="Notifications" close={() => setNotes(false)}>{hermes.events.length ? hermes.events.slice(0, 5).map((e, i) => <div className="popover-row" key={i}><strong>{e.type}</strong><small>{e.at ? time(e.at) : 'Now'}</small></div>) : <Empty title="No notifications" copy="Verified connection and run events will appear here." />}</Popover>}
+    {search && <Palette close={() => setSearch(false)} select={v => { setView(v); setSearch(false); }} />}
+    {dialog && <Dialog kind={dialog} gateway={hermes.status} close={() => setDialog(null)} task={v => setTasks(x => [...x, v])} role={v => setRoles(x => [...x, v])} source={v => setSources(x => [...x, v])} configure={hermes.configure} run={hermes.run} job={hermes.job} />}
+  </div>;
+}
+
+function Nav({ label, icon: Icon, active, onClick }: { id: View; label: string; icon: React.ElementType; active: boolean; onClick: () => void }) { return <button className={`app-nav-item ${active ? 'active' : ''}`} onClick={onClick}><Icon size={15} /><span>{label}</span></button>; }
+function Head({ title, copy, children }: { title: string; copy: string; children?: React.ReactNode }) { return <header className="page-header"><div><h1>{title}</h1><p>{copy}</p></div>{children && <div className="page-actions">{children}</div>}</header>; }
+function Panel({ title, subtitle }: { title: string; subtitle?: string }) { return <header className="panel-header"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div></header>; }
+function statusText(g: Gateway) { return g.status === 'online' ? 'Verified online' : g.status === 'bridge_offline' ? 'Bridge unavailable' : g.status === 'offline' ? 'Hermes unreachable' : g.status === 'loading' ? 'Checking…' : 'Not configured'; }
+function tone(g: Gateway): Status { return g.status === 'online' ? 'live' : g.status === 'offline' ? 'blocked' : 'idle'; }
+function count(value: unknown, keys: string[]) { if (Array.isArray(value)) return value.length; if (value && typeof value === 'object') for (const key of keys) { const item = (value as Record<string, unknown>)[key]; if (Array.isArray(item)) return item.length; } return null; }
+function time(value: string) { try { return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date(value)); } catch { return value; } }
+
+type GuideStep = {
+  id: string;
+  title: string;
+  summary: string;
+  why: string;
+  instructions: string[];
+  command?: string;
+  automatic?: 'bridge' | 'gateway' | 'profiles' | 'jobs';
+  action?: 'configure' | 'refresh' | 'agents' | 'job' | 'settings';
+};
+
+const guideSteps: GuideStep[] = [
+  {
+    id: 'install-hermes',
+    title: 'Install and start Hermes Agent',
+    summary: 'Make sure the Hermes runtime is installed on the machine that will execute work.',
+    why: 'Hermes is the runtime authority. Jarvis can direct and observe it, but cannot replace it.',
+    instructions: ['Open Terminal on the Hermes host.', 'Install Hermes Agent using its official installation method.', 'Run the Hermes gateway and leave it running as a managed service for unattended work.', 'Confirm the gateway starts without an authentication or model-provider error.'],
+    command: 'hermes gateway',
+  },
+  {
+    id: 'enable-api',
+    title: 'Enable the Hermes API server',
+    summary: 'Expose the authenticated API used for health checks, runs, profiles, events, and jobs.',
+    why: 'The command centre connects to Hermes through its supported server API rather than browser-side credentials or simulated agents.',
+    instructions: ['Open the environment file for the Hermes profile you want Jarvis to control.', 'Set API_SERVER_ENABLED=true.', 'Choose an API_SERVER_PORT; the standard local example is 8642.', 'Set a strong API_SERVER_KEY, then restart the Hermes gateway.'],
+    command: 'API_SERVER_ENABLED=true\nAPI_SERVER_PORT=8642\nAPI_SERVER_KEY=replace-with-a-strong-secret',
+  },
+  {
+    id: 'configure-bridge',
+    title: 'Add Hermes credentials to Jarvis',
+    summary: 'Keep the API key in the Jarvis server environment and enter only the gateway URL in the dashboard.',
+    why: 'Server-side credentials prevent the Hermes key from appearing in the browser bundle or local storage.',
+    instructions: ['Copy .env.example to .env in the Hermes Jarvis folder.', 'Set HERMES_API_KEY to the same API_SERVER_KEY configured in Hermes.', 'Optionally set HERMES_API_URL to the gateway URL.', 'Restart npm run server, then use Configure connection below.'],
+    command: 'cp .env.example .env\n# Edit .env, then restart:\nnpm run server',
+    automatic: 'bridge',
+    action: 'configure',
+  },
+  {
+    id: 'verify-gateway',
+    title: 'Verify the live gateway connection',
+    summary: 'Run a real readiness probe and confirm Jarvis reports Verified online.',
+    why: 'A saved URL is not proof of a working connection. This step verifies authentication and upstream readiness.',
+    instructions: ['Select Recheck connection.', 'If Hermes is unreachable, confirm its host, port, firewall, and gateway process.', 'If Hermes returns 401 or 403, check HERMES_API_KEY and restart Jarvis.', 'Continue only when the dashboard reports Verified online.'],
+    automatic: 'gateway',
+    action: 'refresh',
+  },
+  {
+    id: 'review-profiles',
+    title: 'Review discovered Hermes profiles',
+    summary: 'Confirm the available profiles or model routes before assigning organisation roles.',
+    why: 'Jarvis discovers profiles from Hermes but never invents role assignments.',
+    instructions: ['Open the Agents page.', 'Review the profile count reported by Hermes model discovery.', 'Add planned organisation roles as needed.', 'Map profiles to roles only when the real profile metadata is available.'],
+    automatic: 'profiles',
+    action: 'agents',
+  },
+  {
+    id: 'schedule-job',
+    title: 'Create the first background job',
+    summary: 'Schedule a bounded recurring directive through the Hermes Jobs API.',
+    why: 'Hermes scheduled jobs continue independently of the browser; browser timers do not provide reliable 24/7 operation.',
+    instructions: ['Choose a narrow, reversible first job.', 'Write a clear prompt with constraints and an expected output.', 'Choose a cron schedule and create the job.', 'Confirm the job appears in the verified job count before relying on it.'],
+    automatic: 'jobs',
+    action: 'job',
+  },
+  {
+    id: 'production-controls',
+    title: 'Complete production safeguards',
+    summary: 'Protect the command centre before exposing it outside a trusted local network.',
+    why: 'Hermes can use powerful tools. Internet-facing access needs explicit security and recovery controls.',
+    instructions: ['Add command-centre authentication and least-privilege operator roles.', 'Terminate TLS at a trusted reverse proxy and restrict allowed origins.', 'Move secrets to a managed secret store and add mutation-route rate limits.', 'Configure a shared database, backups, monitoring, and alerting.', 'Test approval boundaries and recovery procedures before enabling consequential jobs.'],
+  },
+];
+
+function SetupGuide({ gateway, completed, setCompleted, configure, createJob, refresh, go }: { gateway: Gateway; completed: string[]; setCompleted: React.Dispatch<React.SetStateAction<string[]>>; configure: () => void; createJob: () => void; refresh: () => void; go: (view: View) => void }) {
+  const [selectedId, setSelectedId] = useState(guideSteps[0].id);
+  const selected = guideSteps.find(step => step.id === selectedId) || guideSteps[0];
+  const observed = (step: GuideStep) => {
+    if (step.automatic === 'bridge') return gateway.status !== 'bridge_offline' && gateway.status !== 'loading';
+    if (step.automatic === 'gateway') return gateway.status === 'online';
+    if (step.automatic === 'profiles') return count(gateway.models, ['data', 'models']) !== null;
+    if (step.automatic === 'jobs') return (count(gateway.jobs, ['data', 'jobs']) || 0) > 0;
+    return completed.includes(step.id);
+  };
+  const done = guideSteps.filter(observed).length;
+  const toggle = (id: string) => setCompleted(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
+  const runAction = () => {
+    if (selected.action === 'configure') configure();
+    else if (selected.action === 'refresh') refresh();
+    else if (selected.action === 'agents') go('agents');
+    else if (selected.action === 'job') createJob();
+    else if (selected.action === 'settings') go('settings');
+  };
+  return <div className="page setup-page"><Head title="Steps to do" copy="Follow this checklist to move from a local dashboard to a verified Hermes operation."><span className="setup-progress-label"><strong>{done} of {guideSteps.length}</strong> complete</span></Head><div className="guide-progress" aria-label={`${done} of ${guideSteps.length} setup steps complete`}><span style={{ width: `${done / guideSteps.length * 100}%` }} /></div><div className="guide-layout"><section className="guide-list" aria-label="Setup checklist"><Panel title="Setup checklist" subtitle="Select a step to see exact instructions" />{guideSteps.map((step, index) => { const isDone = observed(step); return <button key={step.id} className={`guide-step ${selected.id === step.id ? 'selected' : ''}`} onClick={() => setSelectedId(step.id)} aria-current={selected.id === step.id ? 'step' : undefined}><span className={`guide-check ${isDone ? 'complete' : ''}`}>{isDone ? <Check size={13} /> : index + 1}</span><span><strong>{step.title}</strong><small>{step.summary}</small></span><span className="guide-step-state">{step.automatic ? isDone ? 'Verified' : 'Waiting' : isDone ? 'Complete' : 'Manual'}</span><ChevronRight size={14} /></button>; })}</section><aside className="guide-detail"><header><span className={`guide-check ${observed(selected) ? 'complete' : ''}`}>{observed(selected) ? <Check size={15} /> : guideSteps.indexOf(selected) + 1}</span><div><h2>{selected.title}</h2><p>{selected.summary}</p></div></header><div className="guide-why"><strong>Why this matters</strong><p>{selected.why}</p></div><ol>{selected.instructions.map((instruction, index) => <li key={index}><span>{index + 1}</span><p>{instruction}</p></li>)}</ol>{selected.command && <pre><code>{selected.command}</code></pre>}<footer>{selected.automatic ? <><span className={`verification-state ${observed(selected) ? 'verified' : ''}`}><span className={`status-dot ${observed(selected) ? 'live' : 'idle'}`} /> {observed(selected) ? 'Verified from current app state' : 'Not verified yet'}</span>{selected.action && <button className="button button-secondary" onClick={runAction}>{selected.action === 'configure' ? 'Configure connection' : selected.action === 'refresh' ? 'Recheck connection' : selected.action === 'agents' ? 'Open Agents' : 'Create background job'}</button>}</> : <button className="button button-outline" onClick={() => toggle(selected.id)}>{observed(selected) ? 'Mark as incomplete' : 'Mark step complete'}</button>}</footer></aside></div></div>;
+}
+
+function ConvoHome({ gateway, events, roles, openThread, go, newDirective }: { gateway: Gateway; events: Event[]; roles: Role[]; openThread: (id: string) => void; go: (view: View) => void; newDirective: () => void }) {
+  const recent = roles.slice(0, 4);
+  return <div className="convo-home">
+    <section className="convo-inbox">
+      <header className="inbox-heading"><div><span className="brand-orb" /><h1>Hermes</h1></div><button className="icon-button" aria-label="New directive" onClick={newDirective}><Pencil size={22} /></button></header>
+      <div className="pinned-agents" aria-label="Pinned agents">{roles.slice(0, 3).map((role, index) => <button key={role.id} onClick={() => openThread(role.id)}><AgentAvatar role={role} featured={index === 0} size="large" /><strong>{role.name}</strong><small>{index === 0 ? 'Directs the organisation' : role.role}</small></button>)}</div>
+      <div className="command-tiles"><button onClick={() => go('work')}><span className="command-tile-icon"><Inbox size={25} /></span><strong>Active work</strong><small>Open the work queue</small></button><button onClick={() => go('approvals')}><span className="command-tile-icon"><ShieldCheck size={25} /></span><strong>Approvals</strong><small>Review human decisions</small></button><button onClick={() => go('setup')}><span className="command-tile-icon"><ListChecks size={25} /></span><strong>Steps to do</strong><small>Finish configuration</small></button></div>
+      <header className="list-heading"><h2>Conversations</h2><button onClick={() => go('agents')}>Manage agents</button></header>
+      <div className="home-conversation-list">{recent.map((role, index) => <button key={role.id} onClick={() => openThread(role.id)}><AgentAvatar role={role} featured={index === 0} /><span><strong>{role.name}</strong><small>{role.role}</small><em>{gateway.status === 'online' ? index === 0 ? 'Ready for a verified directive' : 'Gateway available' : 'Saved locally · Hermes not connected'}</em></span><time>{index === 0 ? 'Now' : ''}</time></button>)}</div>
+    </section>
+    <section className="desktop-command-preview"><header><div><AgentAvatar role={roles[0]} featured /><span><strong>CEO</strong><small>{gateway.status === 'online' ? 'Verified Hermes transport' : 'Local conversation'}</small></span></div><button className="icon-button" onClick={() => openThread('ceo')} aria-label="Open CEO conversation"><ChevronRight size={20} /></button></header><div className="preview-centre"><AgentAvatar role={roles[0]} featured size="hero" /><h2>Your organisation starts here.</h2><p>Give the CEO an outcome, constraints, and the authority boundary. Hermes can only execute when the gateway is verified.</p><div className="directive-guide"><div><span>1</span><strong>Set the outcome</strong><small>Describe what success should look like.</small></div><div><span>2</span><strong>Define authority</strong><small>Name the decisions that must return to you.</small></div><div><span>3</span><strong>Connect and dispatch</strong><small>Execution begins only through verified Hermes.</small></div></div><button className="preview-message-button" onClick={() => openThread('ceo')}>Message the CEO <ArrowRight size={16} /></button></div><footer><span className={`status-dot ${tone(gateway)}`} /><strong>{statusText(gateway)}</strong><small>{gateway.error || gateway.base_url || 'Open Settings to connect Hermes.'}</small></footer></section>
+    <aside className="command-context"><header><h2>Command centre</h2><button className="icon-button" onClick={() => go('settings')} aria-label="Open settings"><Settings size={18} /></button></header><dl><div><dt>Runtime</dt><dd>{statusText(gateway)}</dd></div><div><dt>Observed events</dt><dd>{events.length || 'None'}</dd></div><div><dt>Authority</dt><dd>Operator controlled</dd></div><div><dt>Persistence</dt><dd>Browser local</dd></div></dl><div className="context-note"><ShieldCheck size={18} /><p>Nothing is presented as active until Hermes reports it.</p></div><nav><button onClick={() => go('setup')}><ListChecks size={17} /><span><strong>Steps to do</strong><small>Guided production checklist</small></span><ChevronRight size={16} /></button><button onClick={() => go('agents')}><Users size={17} /><span><strong>Organisation</strong><small>Roles and profile sync</small></span><ChevronRight size={16} /></button><button onClick={() => go('knowledge')}><Database size={17} /><span><strong>Knowledge</strong><small>Sources and retrieval</small></span><ChevronRight size={16} /></button></nav></aside>
+  </div>;
+}
+
+function AgentAvatar({ role, featured = false, size = 'normal' }: { role?: Role; featured?: boolean; size?: 'normal' | 'large' | 'hero' }) { return <span className={`agent-avatar ${featured ? 'featured' : ''} ${size}`} aria-hidden="true">{role?.initials || 'HJ'}<span className={`presence ${featured ? 'orange' : ''}`} /></span>; }
+
+function Overview({ gateway, events, refresh, message, configure }: { gateway: Gateway; events: Event[]; refresh: () => void; message: () => void; configure: () => void }) { const profiles = count(gateway.models, ['data','models']), jobs = count(gateway.jobs, ['data','jobs']); return <div className="page overview-page"><Head title="Organisation overview" copy="A verified operating picture of the command centre and connected runtime."><button className="button button-outline" onClick={refresh}><RefreshCw size={14} /> Refresh</button><button className="button button-secondary" onClick={message}>Message CEO <ArrowRight size={14} /></button></Head><div className="system-strip"><Strip icon={Network} label="Gateway" value={statusText(gateway)} state={tone(gateway)} /><Strip icon={Users} label="Profiles" value={profiles === null ? 'Not observed' : `${profiles} discovered`} state={profiles === null ? 'idle' : 'live'} /><Strip icon={Zap} label="Jobs" value={jobs === null ? 'Not observed' : `${jobs} configured`} state={jobs === null ? 'idle' : 'live'} /><Strip icon={Database} label="Events" value={events.length ? `${events.length} received` : 'None received'} state={events.length ? 'live' : 'idle'} /></div><div className="dashboard-grid"><section className="dashboard-panel work-queue-panel"><Panel title="Setup queue" subtitle="Infrastructure required for real operation" /><div className="queue-columns"><Queue title="Required" state="blocked"><Card title="Connect Hermes Gateway" area="Infrastructure" state={tone(gateway)} /><Card title="Choose persistent storage" area="Architecture" state="draft" /></Queue><Queue title="Review" state="draft"><Card title="Define approval boundaries" area="Governance" state="draft" /></Queue><Queue title="Complete" state="idle"><div className="empty-queue"><Check size={14} /><span>{gateway.status === 'online' ? 'Gateway verified' : 'No completed setup'}</span></div></Queue></div></section><section className="dashboard-panel attention-panel"><Panel title="Attention" subtitle="What needs an operator" /><div className="attention-row"><span className={`attention-icon ${tone(gateway)}`}>{gateway.status === 'online' ? <Check size={14} /> : <AlertCircle size={14} />}</span><div><strong>Hermes Gateway</strong><small>{gateway.error || statusText(gateway)}</small></div></div><button className="panel-link" onClick={configure}>Open connection settings <ArrowRight size={13} /></button></section><section className="dashboard-panel activity-feed-panel"><Panel title="Organisation activity" subtitle="Verified bridge and Hermes events" />{events.length ? <div className="event-list">{events.slice(0, 8).map((e, i) => <div className="event-row" key={i}><span className="status-dot live" /><strong>{e.type}</strong><span>{e.at ? time(e.at) : 'Now'}</span></div>)}</div> : <Empty title="No live events yet" copy="Connection, run, tool, and job events appear only when observed." />}</section></div></div>; }
+function Strip({ icon: Icon, label, value, state }: { icon: React.ElementType; label: string; value: string; state: Status }) { return <div className="system-strip-item"><span className="strip-icon"><Icon size={14} /></span><div><span>{label}</span><strong>{value}</strong></div><span className={`status-dot ${state}`} /></div>; }
+function Queue({ title, state, children }: { title: string; state: Status; children: React.ReactNode }) { return <div className="queue-column"><header><span><span className={`status-ring ${state}`} />{title}</span></header>{children}</div>; }
+function Card({ title, area, state }: { title: string; area: string; state: Status }) { return <article className="work-card"><div><span className={`task-state ${state}`} /><strong>{title}</strong></div><footer><span className="quiet-badge">{area}</span></footer></article>; }
+
+function Messages({ gateway, roles, activeRole, setActiveRole, closeThread, run, settings, addRole }: { gateway: Gateway; roles: Role[]; activeRole: string; setActiveRole: (id: string) => void; closeThread: () => void; run: (input: string, session: string) => Promise<unknown>; settings: () => void; addRole: () => void }) {
+  const [draft, setDraft] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [skills, setSkills] = useState(false);
+  const [messages, setMessages] = useStored<Record<string,string[]>>('hermes.messages', {});
+  const role = roles.find(r => r.id === activeRole) || roles[0];
+  const send = async () => { const text = draft.trim(); if (!text || busy) return; setMessages(m => ({ ...m, [activeRole]: [...(m[activeRole] || []), text] })); setDraft(''); if (gateway.status !== 'online') return; setBusy(true); setError(''); try { await run(text, `jarvis-${activeRole}`); } catch (e) { setError(e instanceof Error ? e.message : 'Hermes did not accept the directive.'); } finally { setBusy(false); } };
+  return <div className="messages-layout imessage-layout">
+    <aside className="conversation-pane"><header><div><h1>Messages</h1><p>{gateway.status === 'online' ? 'Hermes transport available' : 'Local-only conversations'}</p></div><button className="icon-button" onClick={addRole} aria-label="Add planned agent"><Pencil size={19} /></button></header><label className="message-search"><Search size={16} /><input placeholder="Search" onChange={() => undefined} /></label><div className="conversation-list">{roles.map((r, index) => <button key={r.id} className={`conversation-row ${activeRole === r.id ? 'selected' : ''}`} onClick={() => setActiveRole(r.id)}><AgentAvatar role={r} featured={index === 0} /><span><strong>{r.name}</strong><small>{r.role}</small><em>{(messages[r.id] || []).at(-1) || (gateway.status === 'online' ? 'Ready for a directive' : 'Saved locally')}</em></span><time>{activeRole === r.id ? 'Now' : ''}</time></button>)}</div></aside>
+    <section className="thread-pane"><header className="thread-header"><div><button className="icon-button mobile-back" onClick={closeThread} aria-label="Back"><ChevronLeft size={23} /></button><AgentAvatar role={role} featured={role?.id === 'ceo'} /><span><strong>{role?.name}</strong><small>{gateway.status === 'online' ? 'Hermes available' : 'Local only'}</small></span></div><button className="thread-add" onClick={addRole} aria-label="Add agent"><Plus size={22} /></button></header>
+      <div className="thread-stream"><div className="thread-intro"><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h2>{role?.name}</h2><p>{role?.role}</p><button onClick={() => setSkills(true)}>See its controls</button></div><div className="system-message"><span className="mini-avatar">JR</span> You direct this agent · Authority stays with you</div>{(messages[activeRole] || []).map((message, index) => <div className="imessage-row outgoing" key={index}><div className="imessage-bubble">{message}</div><small>{gateway.status === 'online' ? 'Sent to Hermes' : 'Saved locally'}</small></div>)}{!(messages[activeRole] || []).length && <div className="agent-message"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>{gateway.status === 'online' ? 'What outcome should I coordinate for you?' : 'Connect Hermes to send verified directives. I will not simulate a reply while the runtime is offline.'}</p></div></div>}{error && <div className="form-error" role="alert">{error}</div>}</div>
+      <div className="composer-wrap"><div className="identity-selector"><span className="mini-avatar">JR</span><span>Chat as Judah</span></div><div className="composer"><button className="composer-tool" disabled title="Storage provider required" aria-label="Photo library"><ImageIcon size={20} /></button><button className="composer-tool" disabled title="Camera access is not configured" aria-label="Camera"><Camera size={20} /></button><button className="composer-tool" disabled title="Voice input is not configured" aria-label="Voice message"><Mic size={20} /></button><textarea value={draft} onChange={e => setDraft(e.target.value)} maxLength={12000} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`Message ${role?.name || 'Hermes'}`} rows={1} /><button className="send-button" onClick={send} disabled={!draft.trim() || busy} aria-label="Send">{busy ? <RefreshCw className="spin" size={16} /> : <Send size={17} />}</button></div><p>{gateway.status === 'online' ? 'Creates a verified Hermes run' : 'Saved locally until Hermes is connected'}</p></div>
+    </section>
+    <aside className="thread-inspector"><header><h2>Agent controls</h2><button className="icon-button" onClick={settings} aria-label="Settings"><Settings size={18} /></button></header><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h3>{role?.name}</h3><p>{role?.role}</p><dl><div><dt>Session</dt><dd className="mono">jarvis-{activeRole}</dd></div><div><dt>Transport</dt><dd>{gateway.status === 'online' ? 'Hermes Runs API' : 'Local only'}</dd></div><div><dt>Authority</dt><dd>Operator directed</dd></div><div><dt>Status</dt><dd>{statusText(gateway)}</dd></div></dl><button className="inspector-skills" onClick={() => setSkills(true)}>View controls and skills</button><div className="context-note"><ShieldCheck size={17} /><p>Agent capability is limited by the connected Hermes profile and your approval policy.</p></div></aside>
+    {skills && <div className="skills-sheet" onClick={() => setSkills(false)}><section onClick={event => event.stopPropagation()}><header><div><AgentAvatar role={role} featured={role?.id === 'ceo'} /><span><strong>{role?.name}</strong><small>Controls and capabilities</small></span></div><button className="icon-button" onClick={() => setSkills(false)}><X size={20} /></button></header><div><h2>What this agent can do</h2><p>{gateway.status === 'online' ? 'Capabilities come from the connected Hermes profile. Open Agents to inspect discovered profile data.' : 'No live skills are available because Hermes is not connected.'}</p><button className="button button-outline" onClick={() => { setSkills(false); settings(); }}>Open connection settings</button></div></section></div>}
+  </div>;
+}
+
+function Work({ tasks, setTasks, add }: { tasks: Task[]; setTasks: React.Dispatch<React.SetStateAction<Task[]>>; add: () => void }) { const [filter, setFilter] = useState('all'); const visible = filter === 'all' ? tasks : tasks.filter(t => t.state === filter); return <div className="page"><Head title="Work" copy="Local setup tasks and verified Hermes work in one queue."><button className="button button-secondary" onClick={add}><Plus size={14} /> Add local task</button></Head><div className="table-panel"><div className="table-toolbar"><div className="segmented">{[['all','All work'],['blocked','Required'],['draft','Review'],['live','Complete']].map(([id,label]) => <button key={id} className={filter === id ? 'active' : ''} onClick={() => setFilter(id)}>{label}</button>)}</div></div><div className="data-table work-table"><div className="table-head"><span>Status</span><span>Task</span><span>Area</span><span>Owner</span><span>Runtime</span><span /></div>{visible.map(t => <div className="table-row" key={t.id}><button className="state-button" onClick={() => setTasks(all => all.map(x => x.id === t.id ? { ...x, state: x.state === 'live' ? 'draft' : 'live' } : x))}><span className={`status-ring ${t.state}`} /> {t.state === 'blocked' ? 'Required' : t.state === 'live' ? 'Complete' : 'Draft'}</button><strong>{t.title}</strong><span className="quiet-badge">{t.area}</span><span>Unassigned</span><span className="mono">Local</span><button className="icon-button" aria-label={`Delete ${t.title}`} onClick={() => setTasks(all => all.filter(x => x.id !== t.id))}><X size={14} /></button></div>)}{!visible.length && <Empty title="No work in this view" copy="Choose another filter or add a local task." />}</div></div></div>; }
+function Agents({ roles, gateway, add }: { roles: Role[]; gateway: Gateway; add: () => void }) { const profiles = count(gateway.models, ['data','models']); return <div className="page"><Head title="Agents" copy="Planned roles plus profiles discovered from Hermes."><button className="button button-secondary" onClick={add}><Plus size={14} /> Add planned role</button></Head><div className="agents-layout"><section className="table-panel"><Panel title="Organisation roster" subtitle={profiles === null ? 'No profiles observed' : `${profiles} profiles discovered`} /><div className="data-table agent-table"><div className="table-head"><span>Agent</span><span>Role</span><span>Status</span><span>Model</span><span>Workspace</span><span /></div>{roles.map(r => <div className="table-row" key={r.id}><span className="agent-cell"><span className="avatar">{r.initials}</span><strong>{r.name}</strong></span><span>{r.role}</span><span><span className={`status-dot ${tone(gateway)}`} /> {gateway.status === 'online' ? 'Gateway available' : 'Offline'}</span><span className="mono">Not assigned</span><span>Local plan</span><span /></div>)}</div></section><aside className="detail-panel"><Panel title="Profile sync" subtitle="Automatic model discovery" /><div className="setup-sequence"><Step title="Connect Gateway" detail={statusText(gateway)} /><Step title="Discover profiles" detail="Every successful probe refreshes /v1/models." /><Step title="Map organisation" detail="Assignments remain explicit, never inferred." /></div></aside></div></div>; }
+function Step({ title, detail }: { title: string; detail: string }) { return <div className="setup-step"><span className="setup-index"><Circle size={10} /></span><div><strong>{title}</strong><p>{detail}</p></div></div>; }
+function Knowledge({ sources, add }: { sources: Source[]; add: () => void }) { const [query, setQuery] = useState(''); const visible = useMemo(() => sources.filter(s => `${s.title} ${s.detail}`.toLowerCase().includes(query.toLowerCase())), [sources, query]); return <div className="page"><Head title="Knowledge" copy="Source plans remain truthful until a connector is configured."><label className="search-field page-search"><Search size={14} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search sources" /></label><button className="button button-secondary" onClick={add}><Plus size={14} /> Add source</button></Head><div className="knowledge-layout"><section className="table-panel"><Panel title="Sources" subtitle={`${sources.length} local source plans`} />{visible.map(s => <div className="knowledge-row" key={s.id}><span className="source-icon"><Database size={16} /></span><div><strong>{s.title}</strong><small>{s.detail}</small></div><span className="quiet-badge">Local plan</span></div>)}{!visible.length && <Empty title="No matching sources" copy="Try another search." />}</section><aside className="detail-panel"><Panel title="Retrieval policy" subtitle="Unavailable until a provider is connected" /><dl className="stacked-metadata"><div><dt>Index</dt><dd>Not available</dd></div><div><dt>Embeddings</dt><dd>Not selected</dd></div><div><dt>Access policy</dt><dd>Not defined</dd></div></dl></aside></div></div>; }
+function Approvals({ settings }: { settings: () => void }) { const [tab, setTab] = useState('Pending'); return <div className="page"><Head title="Approvals" copy="High-impact decisions wait for explicit human authority." /><div className="approvals-shell"><div className="approval-tabs">{['Pending','Resolved','Policy events'].map(v => <button key={v} className={tab === v ? 'active' : ''} onClick={() => setTab(v)}>{v}</button>)}</div><div className="approval-empty"><span className="empty-symbol"><ShieldCheck size={20} /></span><h2>No {tab.toLowerCase()}</h2><p>This is an empty operational state. Requests appear only when Hermes produces them.</p><button className="button button-outline" onClick={settings}>Review connection requirements</button></div></div></div>; }
+
+function SettingsView({ gateway, refresh, configure, job }: { gateway: Gateway; refresh: () => void; configure: () => void; job: () => void }) { const [tab, setTab] = useState('Connections'); const tabs = ['Connections','Organisation','Models','Security','Appearance']; const models = count(gateway.models, ['data','models']), jobs = count(gateway.jobs, ['data','jobs']); return <div className="page"><Head title="Settings" copy="Configure infrastructure and inspect what is actually available." /><div className="settings-layout"><nav className="settings-nav">{tabs.map(v => <button key={v} className={tab === v ? 'active' : ''} onClick={() => setTab(v)}>{v}</button>)}</nav><section className="settings-content"><Panel title={tab} subtitle={tab === 'Connections' ? 'Credentials remain server-side' : 'Command-centre preferences'} />{tab === 'Connections' && <><Connection icon={Network} title="Hermes Gateway" detail={gateway.base_url || 'Required for profiles, messages, events, and jobs'} state={statusText(gateway)} action={configure} /><Connection icon={Zap} title="Background jobs" detail="Hermes Jobs API enables scheduled unattended work" state={jobs === null ? 'Not observed' : `${jobs} configured`} action={job} disabled={gateway.status !== 'online'} /><div className="settings-actions"><button className="button button-outline" onClick={refresh}><RefreshCw size={14} /> Recheck connection</button></div></>}{tab === 'Organisation' && <Empty title="Organisation mapping is local" copy="Planned roles persist in this browser; discovered profiles come from Hermes." />}{tab === 'Models' && <Empty title={models === null ? 'No models observed' : `${models} models observed`} copy="Connect Hermes to discover current routes." />}{tab === 'Security' && <div className="settings-copy"><ShieldCheck size={18} /><h3>Server-side credentials</h3><p>The browser never receives HERMES_API_KEY. Put it in the server environment and restart the bridge.</p></div>}{tab === 'Appearance' && <div className="settings-copy"><h3>Quiet command centre</h3><p>The theme follows the project design system and reduced-motion preference.</p></div>}</section></div></div>; }
+function Connection({ icon: Icon, title, detail, state, action, disabled }: { icon: React.ElementType; title: string; detail: string; state: string; action: () => void; disabled?: boolean }) { return <div className="connection-row"><span className="source-icon"><Icon size={16} /></span><div><strong>{title}</strong><small>{detail}</small></div><span className="connection-status"><span className="status-dot idle" /> {state}</span><button className="button button-outline" onClick={action} disabled={disabled}>Configure</button></div>; }
+
+function AgentPanel({ gateway, events, close }: { gateway: Gateway; events: Event[]; close: () => void }) { const [small, setSmall] = useState(false); return <section className={`agent-panel ${small ? 'minimized' : ''}`}><header><span>Agent activity</span><span className="quiet-badge mono">{gateway.status.toUpperCase()}</span><div className="agent-panel-actions"><button className="icon-button" onClick={() => setSmall(v => !v)} aria-label="Minimize"><Minimize2 size={13} /></button><button className="icon-button" onClick={close} aria-label="Close"><X size={14} /></button></div></header>{!small && <><div className="agent-panel-body"><div className="agent-event"><span className={`status-dot ${tone(gateway)}`} /><div><strong>{gateway.status === 'online' ? 'Hermes connected' : 'Waiting for Hermes'}</strong><p>{gateway.error || (events[0] ? `Latest: ${events[0].type}` : 'No verified activity received.')}</p></div></div><div className="agent-log mono">{events.slice(0, 3).map((e, i) => <code key={i}>{e.type}</code>)}{!events.length && <code>No tool calls observed</code>}</div></div><footer><ChevronRight size={13} /><span>{events.length} observed events</span></footer></>}</section>; }
+function Palette({ close, select }: { close: () => void; select: (v: View) => void }) { const [q, setQ] = useState(''); const items = [...nav, { id: 'settings' as View, label: 'Settings', icon: Settings }].filter(i => i.label.toLowerCase().includes(q.toLowerCase())); return <div className="modal-backdrop" onMouseDown={close}><section className="command-palette" role="dialog" aria-modal="true" onMouseDown={e => e.stopPropagation()}><label><Search size={16} /><input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Go to a view…" /></label><div>{items.map(i => { const Icon = i.icon; return <button key={i.id} onClick={() => select(i.id)}><Icon size={15} /><span>{i.label}</span><ChevronRight size={13} /></button>; })}{!items.length && <Empty title="No results" copy="Try another view name." />}</div></section></div>; }
+function Popover({ title, children, close }: { title: string; children: React.ReactNode; close: () => void }) { return <aside className="app-popover"><header><strong>{title}</strong><button className="icon-button" onClick={close} aria-label="Close"><X size={14} /></button></header>{children}</aside>; }
+function Empty({ title, copy }: { title: string; copy: string }) { return <div className="compact-empty"><strong>{title}</strong><p>{copy}</p></div>; }
+
+function Dialog({ kind, gateway, close, task, role, source, configure, run, job }: { kind: Exclude<Kind,null>; gateway: Gateway; close: () => void; task: (v: Task) => void; role: (v: Role) => void; source: (v: Source) => void; configure: (v: string) => Promise<void>; run: (v: string,s: string) => Promise<unknown>; job: (v: Record<string,string>) => Promise<unknown> }) { const [a, setA] = useState(kind === 'connection' ? gateway.base_url || '' : ''), [b, setB] = useState(''), [schedule, setSchedule] = useState('0 9 * * 1-5'), [busy, setBusy] = useState(false), [error, setError] = useState(''); const titles = { directive: 'New directive', task: 'Add local task', role: 'Add planned role', source: 'Add source plan', connection: 'Connect Hermes Gateway', job: 'Create background job' }; const submit = async (e: FormEvent) => { e.preventDefault(); if (!a.trim()) return setError('This field is required.'); setBusy(true); setError(''); try { if (kind === 'connection') await configure(a.trim()); else if (kind === 'directive') await run(a.trim(), 'jarvis-ceo'); else if (kind === 'job') await job({ prompt: a.trim(), schedule: schedule.trim() }); else if (kind === 'task') task({ id: crypto.randomUUID(), title: a.trim(), area: b.trim() || 'General', state: 'draft' }); else if (kind === 'role') role({ id: crypto.randomUUID(), name: a.trim(), role: b.trim() || 'Planned role', initials: a.trim().split(/\s+/).map(x => x[0]).join('').slice(0,2).toUpperCase() }); else source({ id: crypto.randomUUID(), title: a.trim(), detail: b.trim() || 'Not configured' }); close(); } catch (e) { setError(e instanceof Error ? e.message : 'Action failed.'); } finally { setBusy(false); } }; const remote = kind === 'directive' || kind === 'job'; return <div className="modal-backdrop" onMouseDown={close}><form className="action-dialog" role="dialog" aria-modal="true" onMouseDown={e => e.stopPropagation()} onSubmit={submit}><header><div><h2>{titles[kind]}</h2><p>{kind === 'connection' ? 'The endpoint is saved by the server; the API key stays in its environment.' : remote ? 'This creates a real Hermes operation and requires an online gateway.' : 'This item is saved locally in your browser.'}</p></div><button type="button" className="icon-button" onClick={close}><X size={15} /></button></header><label><span>{kind === 'connection' ? 'Gateway URL' : kind === 'job' ? 'Job prompt' : kind === 'directive' ? 'Directive' : kind === 'role' ? 'Role name' : kind === 'source' ? 'Source name' : 'Task title'}</span>{remote ? <textarea autoFocus value={a} onChange={e => setA(e.target.value)} maxLength={12000} rows={5} /> : <input autoFocus value={a} onChange={e => setA(e.target.value)} maxLength={200} placeholder={kind === 'connection' ? 'http://127.0.0.1:8642' : ''} />}</label>{['task','role','source'].includes(kind) && <label><span>{kind === 'task' ? 'Area' : kind === 'role' ? 'Responsibility' : 'Connection note'}</span><input value={b} onChange={e => setB(e.target.value)} maxLength={300} /></label>}{kind === 'job' && <label><span>Cron schedule</span><input value={schedule} onChange={e => setSchedule(e.target.value)} /><small>Example: 0 9 * * 1-5 runs at 9:00 on weekdays.</small></label>}{error && <div className="form-error" role="alert">{error}</div>}<footer><button type="button" className="button button-outline" onClick={close}>Cancel</button><button className="button button-primary" disabled={busy || (remote && gateway.status !== 'online')}>{busy ? 'Working…' : kind === 'connection' ? 'Connect and verify' : kind === 'job' ? 'Create job' : 'Save'}</button></footer></form></div>; }

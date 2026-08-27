@@ -1,0 +1,107 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: H
+      - generic [ref=e7]: Hermes Jarvis
+    - navigation "Primary navigation" [ref=e8]:
+      - link "System" [ref=e9] [cursor=pointer]:
+        - /url: "#system"
+      - link "Principles" [ref=e10] [cursor=pointer]:
+        - /url: "#principles"
+      - link "Status" [ref=e11] [cursor=pointer]:
+        - /url: "#status"
+    - button "Open command centre" [ref=e12] [cursor=pointer]
+  - main [ref=e15]:
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - heading "An operating system for an autonomous AI organisation." [level=1] [ref=e18]
+        - paragraph [ref=e19]: Set direction once. Hermes Jarvis coordinates specialised agents, keeps work visible, and brings the decisions that matter back to you.
+        - generic [ref=e20]:
+          - button "Explore the interface" [ref=e21] [cursor=pointer]
+          - link "See how it works" [ref=e24] [cursor=pointer]:
+            - /url: "#system"
+      - generic "Hermes Jarvis interface preview" [ref=e27]:
+        - generic [ref=e28]:
+          - generic [ref=e29]:
+            - generic [ref=e30]: H
+            - generic [ref=e31]: Jarvis HQ
+          - generic [ref=e34]: Workspace
+          - generic [ref=e35]:
+            - text: Inbox
+            - generic [ref=e39]: —
+          - generic [ref=e40]: Projects
+          - generic [ref=e46]: Work graph
+        - generic [ref=e52]:
+          - generic [ref=e53]: Q3 Operating plan
+          - generic [ref=e63]:
+            - generic [ref=e64]:
+              - generic [ref=e65]:
+                - generic [ref=e66]: Planned
+                - generic [ref=e69]: —
+              - generic [ref=e70]:
+                - generic [ref=e71]: HJ-18
+                - strong [ref=e72]: Map capability gaps
+                - generic [ref=e73]: Task
+              - generic [ref=e76]:
+                - generic [ref=e77]: HJ-21
+                - strong [ref=e78]: Define approval boundaries
+                - generic [ref=e79]: Task
+            - generic [ref=e82]:
+              - generic [ref=e83]:
+                - generic [ref=e84]: In progress
+                - generic [ref=e87]: —
+              - generic [ref=e88]:
+                - generic [ref=e89]: HJ-23
+                - strong [ref=e90]: Reconcile Hermes profiles
+                - generic [ref=e91]: Task
+            - generic [ref=e94]:
+              - generic [ref=e95]:
+                - generic [ref=e96]: Complete
+                - generic [ref=e99]: —
+              - generic [ref=e100]:
+                - generic [ref=e101]: HJ-12
+                - strong [ref=e102]: Command centre shell
+                - generic [ref=e103]: Task
+        - generic [ref=e106]:
+          - generic [ref=e107]:
+            - generic [ref=e108]: CEO
+            - generic [ref=e110]: MODEL UNSET
+          - paragraph [ref=e111]: Organisation review
+          - generic [ref=e112]: Waiting for Hermes connection…
+    - generic [ref=e113]:
+      - generic [ref=e114]:
+        - heading "One organisation. Clear lines of responsibility." [level=2] [ref=e115]
+        - paragraph [ref=e116]: The CEO holds the long view. Departments own outcomes. Agents contribute specialised work. Every assignment and decision remains observable.
+      - generic "Organisation map preview" [ref=e117]:
+        - generic [ref=e118]:
+          - generic [ref=e122]: CEO
+          - generic [ref=e123]: strategy
+        - generic [ref=e127]: Research
+        - generic [ref=e132]: Engineering
+        - generic [ref=e136]: Growth
+    - generic [ref=e140]:
+      - heading "Designed for quiet control." [level=2] [ref=e141]
+      - generic [ref=e142]:
+        - article [ref=e143]:
+          - generic [ref=e144]: PERSIST
+          - heading "Work survives the window" [level=3] [ref=e145]
+          - paragraph [ref=e146]: The organisation is designed to continue through Gateway infrastructure rather than depending on an open chat.
+        - article [ref=e147]:
+          - generic [ref=e148]: ROUTE
+          - heading "Capability meets cost" [level=3] [ref=e149]
+          - paragraph [ref=e150]: Tasks are intended to use the model and agent appropriate to their difficulty, context, and risk.
+        - article [ref=e151]:
+          - generic [ref=e152]: ESCALATE
+          - heading "Humans keep authority" [level=3] [ref=e153]
+          - paragraph [ref=e154]: High-impact actions surface for approval with the context needed to make a clear decision.
+    - generic [ref=e155]:
+      - generic [ref=e156]: INTERFACE SHELL
+      - heading "The command centre is ready for real infrastructure." [level=2] [ref=e159]
+      - paragraph [ref=e160]: Hermes profile sync, persistent messaging, task storage, model usage, and knowledge connectors remain explicitly unconfigured.
+      - button "Inspect the command centre" [ref=e161] [cursor=pointer]
+  - contentinfo [ref=e164]:
+    - generic [ref=e165]:
+      - generic [ref=e166]: H
+      - generic [ref=e167]: Hermes Jarvis
+    - generic [ref=e168]: Autonomous work, made legible.
+    - generic [ref=e169]: "2026"

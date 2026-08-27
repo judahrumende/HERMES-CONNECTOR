@@ -1,0 +1,91 @@
+- generic [ref=e170]:
+  - complementary [ref=e171]:
+    - button "H Jarvis HQ Local workspace" [ref=e172] [cursor=pointer]:
+      - generic [ref=e173]: H
+      - generic [ref=e174]:
+        - strong [ref=e175]: Jarvis HQ
+        - generic [ref=e176]: Local workspace
+    - generic [ref=e179]:
+      - generic [ref=e180]: Workspace
+      - button "Messages" [ref=e181] [cursor=pointer]
+      - button "Inbox" [ref=e184] [cursor=pointer]
+      - button "Projects" [ref=e188] [cursor=pointer]
+      - button "Work graph" [ref=e194] [cursor=pointer]
+    - generic [ref=e200]:
+      - generic [ref=e201]: Favorites
+      - button "CEO channel" [ref=e202] [cursor=pointer]
+      - button "Research room" [ref=e206] [cursor=pointer]
+    - generic [ref=e215]:
+      - strong [ref=e216]: Hermes offline
+      - generic [ref=e217]: Connector not configured
+    - button "Settings" [ref=e218] [cursor=pointer]
+  - complementary [ref=e222]:
+    - generic [ref=e223]:
+      - generic [ref=e224]:
+        - text: MESSAGES
+        - heading "Conversations" [level=1] [ref=e225]
+      - button "Conversation menu" [ref=e226] [cursor=pointer]
+    - textbox [ref=e235]:
+      - /placeholder: Search conversations
+    - generic [ref=e236]:
+      - button "HJ CEO Strategic orchestrator Ready for your next directive" [ref=e237] [cursor=pointer]:
+        - generic [ref=e238]: HJ
+        - generic [ref=e239]:
+          - strong [ref=e240]: CEO
+          - generic [ref=e241]: Strategic orchestrator
+          - emphasis [ref=e242]: Ready for your next directive
+      - button "CS Chief of Staff Operations No live Hermes connection" [ref=e244] [cursor=pointer]:
+        - generic [ref=e245]: CS
+        - generic [ref=e246]:
+          - strong [ref=e247]: Chief of Staff
+          - generic [ref=e248]: Operations
+          - emphasis [ref=e249]: No live Hermes connection
+      - button "RR Research room Group conversation Connector not configured" [ref=e251] [cursor=pointer]:
+        - generic [ref=e252]: RR
+        - generic [ref=e253]:
+          - strong [ref=e254]: Research room
+          - generic [ref=e255]: Group conversation
+          - emphasis [ref=e256]: Connector not configured
+      - button "GR Growth Department No current activity" [ref=e258] [cursor=pointer]:
+        - generic [ref=e259]: GR
+        - generic [ref=e260]:
+          - strong [ref=e261]: Growth
+          - generic [ref=e262]: Department
+          - emphasis [ref=e263]: No current activity
+    - button "New conversation" [ref=e265] [cursor=pointer]
+  - main [ref=e267]:
+    - generic [ref=e268]:
+      - generic [ref=e269]:
+        - generic [ref=e270]: HJ
+        - generic [ref=e271]:
+          - strong [ref=e272]: CEO
+          - generic [ref=e273]: Strategic orchestrator · isolated context
+      - generic [ref=e274]:
+        - button [ref=e275] [cursor=pointer]
+        - button [ref=e279] [cursor=pointer]
+    - generic [ref=e284]:
+      - generic [ref=e285]: TODAY
+      - generic [ref=e286]:
+        - generic [ref=e287]: HJ
+        - generic [ref=e288]:
+          - generic [ref=e289]:
+            - strong [ref=e290]: CEO
+            - time [ref=e291]: now
+          - paragraph [ref=e292]: The interface is ready. Connect Hermes to begin a real session; no response is being simulated.
+      - generic [ref=e293]:
+        - generic [ref=e294]:
+          - generic [ref=e295]: Agent activity
+          - generic [ref=e297]: MODEL UNSET
+        - generic [ref=e307]:
+          - text: SYSTEM
+          - paragraph [ref=e308]: Waiting for a Hermes Gateway connection.
+          - generic [ref=e309]: No tool calls
+        - generic [ref=e313]: Worked for 0s
+    - generic [ref=e317]:
+      - generic [ref=e318]:
+        - button [ref=e319] [cursor=pointer]
+        - textbox "Message CEO…" [ref=e322]
+        - button [disabled] [ref=e323]
+      - generic [ref=e327]:
+        - generic [ref=e328]: Connector offline — messages stay in this browser
+        - generic [ref=e329]: ENTER TO SEND

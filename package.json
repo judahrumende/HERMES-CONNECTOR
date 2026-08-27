@@ -1,0 +1,70 @@
+{
+  "name": "hermes-jarvis",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "dev": "vite",
+    "server": ".venv/bin/uvicorn hermes_jarvis.app:app --app-dir backend --host 127.0.0.1 --port 8787 --reload",
+    "build": "vite build",
+    "start": ".venv/bin/uvicorn hermes_jarvis.app:app --app-dir backend --host 0.0.0.0 --port 8787",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "hermes:connect": "python3 scripts/connect-hermes.py",
+    "desktop:dev": "electron .",
+    "desktop:package": "node scripts/package-desktop.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "lucide-react": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "vitest": "latest"
+  },
+  "build": {
+    "appId": "com.hermesjarvis.commandcentre",
+    "productName": "Hermes Jarvis",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/mac-*/**/*",
+      "!dist/builder-*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist",
+        "to": "dist"
+      },
+      {
+        "from": "desktop-build/hermes-jarvis-server",
+        "to": "server/hermes-jarvis-server"
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    }
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "allowScripts": {
+    "electron@37.10.3": true,
+    "electron-winstaller@5.4.0": true
+  }
+}

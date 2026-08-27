@@ -1,0 +1,94 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-25T11:50:00+08:00",
+  "title": "Design System: Hermes Jarvis",
+  "extensions": {
+    "colorMeta": {
+      "void": { "role": "neutral", "displayName": "Void", "canonical": "#08090a", "tonalRamp": ["#08090a", "#151719", "#25282b", "#3b3f44", "#5b6067", "#858b94", "#bec3ca", "#f1f2f3"] },
+      "carbon": { "role": "neutral", "displayName": "Carbon", "canonical": "#0f1011", "tonalRamp": ["#0f1011", "#1b1d1f", "#2b2e32", "#41454a", "#62676e", "#8c929a", "#c3c7cc", "#f3f4f5"] },
+      "acid-lime": { "role": "primary", "displayName": "Acid Lime", "canonical": "#e4f222", "tonalRamp": ["#252900", "#3f4600", "#626b00", "#899600", "#b5c500", "#d9e817", "#edf65c", "#f8fbc2"] },
+      "pulse-green": { "role": "secondary", "displayName": "Pulse Green", "canonical": "#27a644", "tonalRamp": ["#06200c", "#0c3a17", "#135723", "#1b7730", "#249a3f", "#43bd5d", "#83dc92", "#cef3d4"] },
+      "coral-red": { "role": "secondary", "displayName": "Coral Red", "canonical": "#eb5757", "tonalRamp": ["#2d0909", "#501010", "#791b1b", "#a42a2a", "#cf4141", "#eb6666", "#f2a0a0", "#fadada"] }
+    },
+    "typographyMeta": {
+      "hero": { "displayName": "Hero", "purpose": "Landing thesis only." },
+      "display": { "displayName": "Display", "purpose": "Large editorial statements." },
+      "headline": { "displayName": "Headline", "purpose": "Major section statements." },
+      "heading-small": { "displayName": "Heading Small", "purpose": "Compact marketing statements." },
+      "page-title": { "displayName": "Page Title", "purpose": "Primary app-view titles." },
+      "title": { "displayName": "Title", "purpose": "Screen and component titles." },
+      "body": { "displayName": "Body", "purpose": "Interface and explanatory copy." },
+      "caption": { "displayName": "Caption", "purpose": "Controls and navigation." },
+      "interface": { "displayName": "Interface", "purpose": "Dense app rows and labels." },
+      "interface-small": { "displayName": "Interface Small", "purpose": "Compact secondary app labels." },
+      "metadata": { "displayName": "Metadata", "purpose": "Model names, shortcuts, timestamps, and technical state only." },
+      "metadata-small": { "displayName": "Metadata Small", "purpose": "Compact product-scene metadata." },
+      "metadata-micro": { "displayName": "Metadata Micro", "purpose": "Machine-state detail in constrained previews." }
+    },
+    "shadows": [
+      { "name": "inset-hairline", "value": "inset 0 1px 0 #ffffff08", "purpose": "Subtle internal edge on dark panels." },
+      { "name": "primary-inset", "value": "inset 0 1px 0 #ffffff70, inset 0 -1px 0 #64700066", "purpose": "Acid-lime primary action only." }
+    ],
+    "motion": [
+      { "name": "control-state", "value": "180ms ease-out", "purpose": "Button and icon-control state changes." },
+      { "name": "preview-arrive", "value": "520ms cubic-bezier(.16,1,.3,1)", "purpose": "Single landing product-preview entrance; removed for reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "compact-desktop", "value": "900px" },
+      { "name": "mobile", "value": "720px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single acid-lime primary action allowed on a screen.",
+      "html": "<button class=\"ds-btn-primary\">Open command centre</button>",
+      "css": ".ds-btn-primary{height:36px;padding:0 14px;border:1px solid #e4f222;border-radius:6px;background:#e4f222;color:#08090a;font:510 13px Inter,system-ui,sans-serif;box-shadow:inset 0 1px 0 #ffffff70,inset 0 -1px 0 #64700066;transition:filter 180ms ease-out}.ds-btn-primary:hover{filter:brightness(.94)}.ds-btn-primary:focus-visible{outline:2px solid #e4f222;outline-offset:2px}"
+    },
+    {
+      "name": "Search Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Compact search and assignment input.",
+      "html": "<input class=\"ds-search\" placeholder=\"Search conversations\">",
+      "css": ".ds-search{height:36px;padding:0 10px;border:1px solid #23252a;border-radius:6px;background:#161718;color:#d0d6e0;font:400 12px Inter,system-ui,sans-serif}.ds-search::placeholder{color:#8a8f98}.ds-search:hover{border-color:#383b3f}.ds-search:focus-visible{outline:2px solid #e4f222;outline-offset:2px}"
+    },
+    {
+      "name": "Work Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Hairline work-queue surface with truthful configuration state.",
+      "html": "<article class=\"ds-task\"><strong>Connect Hermes Gateway</strong><span>Infrastructure</span></article>",
+      "css": ".ds-task{display:grid;gap:16px;padding:12px;border:1px solid #23252a;border-radius:12px;background:#0f1011;color:#d0d6e0;font-family:Inter,system-ui,sans-serif;box-shadow:inset 0 1px 0 #ffffff08}.ds-task strong{font-size:12px;font-weight:510}.ds-task span{width:max-content;padding:2px 5px;border:1px solid #23252a;border-radius:4px;color:#8a8f98;font-size:9px}.ds-task:hover{border-color:#383b3f}.ds-task:focus-within{outline:2px solid #e4f222;outline-offset:2px}"
+    },
+    {
+      "name": "Workspace Navigation Item",
+      "kind": "nav",
+      "description": "Compact tonal navigation row.",
+      "html": "<button class=\"ds-nav-item\">Messages</button>",
+      "css": ".ds-nav-item{height:32px;padding:0 9px;border:0;border-radius:6px;background:#161718;color:#ffffff;font:400 13px Inter,system-ui,sans-serif;text-align:left}.ds-nav-item:hover{color:#d0d6e0}.ds-nav-item:focus-visible{outline:2px solid #e4f222;outline-offset:2px}"
+    },
+    {
+      "name": "Agent Activity Panel",
+      "kind": "custom",
+      "description": "Truthful compact agent-state overlay.",
+      "html": "<section class=\"ds-agent\"><header><i></i> Agent activity <span>MODEL UNSET</span></header><p>Waiting for a Hermes Gateway connection.</p><footer>Worked for 0s</footer></section>",
+      "css": ".ds-agent{overflow:hidden;border:1px solid #23252a;border-radius:12px;background:#0f1011;color:#d0d6e0;font:400 11px Inter,system-ui,sans-serif;box-shadow:inset 0 1px 0 #ffffff08}.ds-agent header,.ds-agent footer{display:flex;align-items:center;gap:6px;height:36px;padding:0 12px}.ds-agent header{border-bottom:1px solid #23252a}.ds-agent footer{border-top:1px solid #23252a;color:#62666d}.ds-agent i{width:7px;height:7px;border-radius:9999px;background:#62666d}.ds-agent span{margin-left:auto;padding:2px 5px;border:1px solid #23252a;border-radius:4px;color:#8a8f98;font:400 8px 'JetBrains Mono',ui-monospace,monospace}.ds-agent p{padding:0 14px;color:#8a8f98}.ds-agent:focus-within{outline:2px solid #e4f222;outline-offset:2px}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Command Centre",
+    "overview": "Hermes Jarvis uses a Linear-inspired operational world: dark, dense, precise, and calm. Hierarchy comes from tonal surfaces, hairline divisions, compact data rows, layered inspectors, and disciplined typography rather than decorative effects.",
+    "keyCharacteristics": ["Near-black layered surfaces with one rare acid-lime action.", "Compact, information-rich controls and restrained 12px containers.", "Inter Variable for interface hierarchy; mono only for technical metadata.", "Explicit offline, unconfigured, empty, and local-only states."],
+    "rules": [
+      { "name": "The One Signal Rule", "body": "Use only one acid-lime filled action per screen; all other actions remain neutral.", "section": "colors" },
+      { "name": "The Truthful State Rule", "body": "Operational status colors describe verified state only. Unconfigured systems remain neutral and explicitly labeled.", "section": "colors" },
+      { "name": "The No Bold Rule", "body": "Inter uses only weights 300, 400, 510, and 590; never 700 or heavier.", "section": "typography" },
+      { "name": "The Tonal Depth Rule", "body": "Establish hierarchy with neighboring surface tones and one-pixel borders before adding any shadow.", "section": "elevation" }
+    ],
+    "dos": ["Do use the semantic color aliases so dark and light modes preserve the same hierarchy.", "Do render product UI as the landing page's proof of capability.", "Do keep disconnected systems visibly offline, unconfigured, or local-only.", "Do use Lucide line icons at a consistent 12-17px scale in dense controls."],
+    "donts": ["Don't add another chromatic filled call to action to a screen.", "Don't use gradients outside the single atmospheric hero floor.", "Don't use drop shadows, stock imagery, decorative mono, or radii above 12px.", "Don't turn status colors into large solid badges or fabricate live agent activity."]
+  }
+}

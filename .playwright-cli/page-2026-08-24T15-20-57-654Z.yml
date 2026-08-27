@@ -1,0 +1,73 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - link "H HERMES JARVIS" [ref=e5] [cursor=pointer]:
+      - /url: "#top"
+      - generic [ref=e6]: H
+      - generic [ref=e7]: HERMES JARVIS
+    - navigation [ref=e8]:
+      - link "Vision" [ref=e9] [cursor=pointer]:
+        - /url: "#vision"
+      - link "How it works" [ref=e10] [cursor=pointer]:
+        - /url: "#how"
+      - link "Principles" [ref=e11] [cursor=pointer]:
+        - /url: "#principles"
+      - button "Open command centre" [ref=e12] [cursor=pointer]
+  - main [ref=e16]:
+    - generic [ref=e17]:
+      - text: Hermes Jarvis Autonomous Organisation
+      - generic [ref=e19]:
+        - heading "An AI company that keeps going.AI that runs businesses autonomously" [level=1] [ref=e20]:
+          - text: An AI company
+          - emphasis: that keeps going.
+          - text: AI that runs businesses autonomously
+        - paragraph [ref=e21]: One strategic mind. A workforce of specialist agents. A living system that observes, decides, and follows through while you get on with your day.
+        - link "Get to know Hermes ↘" [ref=e23] [cursor=pointer]:
+          - /url: "#vision"
+      - text: ◷ 11:08 AM PERTH
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - paragraph [ref=e26]: THE IDEA
+        - heading "Businesses are made of decisions, not dashboards." [level=2] [ref=e27]: Businesses are made ofdecisions, not dashboards.
+      - generic [ref=e28]:
+        - paragraph [ref=e29]: Hermes Jarvis turns a collection of capable AI agents into a coordinated organisation. The CEO holds the long view. Departments do the work. Shared memory means nothing important disappears between sessions.
+        - link "Read the operating model ↘" [ref=e30] [cursor=pointer]:
+          - /url: "#how"
+    - generic [ref=e31]:
+      - generic [ref=e32]:
+        - paragraph [ref=e33]: THE OPERATING MODEL
+        - heading "A quiet layer between intention and action." [level=2] [ref=e34]: A quiet layerbetween intentionand action.
+        - paragraph [ref=e35]: Set a direction once. Hermes decomposes the mission, chooses the right workers, and keeps the thread warm around the clock.
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - text: CEO
+          - generic [ref=e38]: strategy
+        - generic [ref=e42]: Research
+        - generic [ref=e43]: Build
+        - generic [ref=e44]: Growth
+        - generic [ref=e45]: Shared memory
+    - generic [ref=e46]:
+      - paragraph [ref=e47]: WORKING PRINCIPLES
+      - generic [ref=e48]:
+        - article [ref=e49]:
+          - text: "01"
+          - heading "Persistent by design" [level=3] [ref=e50]
+          - paragraph [ref=e51]: Work survives a closed browser, a missed message, and a restarted process.
+        - article [ref=e52]:
+          - text: "02"
+          - heading "Useful over busy" [level=3] [ref=e53]
+          - paragraph [ref=e54]: Agents are hired for sustained leverage, not because a queue happens to be empty.
+        - article [ref=e55]:
+          - text: "03"
+          - heading "Visible when it matters" [level=3] [ref=e56]
+          - paragraph [ref=e57]: Decisions, costs, blockers, and approvals stay legible to the human in charge.
+  - contentinfo [ref=e58]:
+    - generic [ref=e59]:
+      - paragraph [ref=e60]: HERMES JARVIS
+      - heading "Let the organisation carry the thread." [level=2] [ref=e61]: Let the organisationcarry the thread.
+    - generic [ref=e62]:
+      - link "Vision" [ref=e63] [cursor=pointer]:
+        - /url: "#vision"
+      - link "Operating model" [ref=e64] [cursor=pointer]:
+        - /url: "#how"
+      - button "Open command centre" [ref=e65] [cursor=pointer]
+      - generic [ref=e69]: © 2026 Hermes Jarvis

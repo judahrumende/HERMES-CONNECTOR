@@ -1,0 +1,155 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]: H
+      - generic [ref=e7]:
+        - generic [ref=e8]: HERMES
+        - generic [ref=e9]: JARVIS COMMAND
+    - generic [ref=e10]:
+      - text: SYSTEM ONLINE
+      - generic [ref=e12]: v0.1
+    - navigation [ref=e13]:
+      - button "Overview" [ref=e14] [cursor=pointer]
+      - button "Organisation" [ref=e18] [cursor=pointer]
+      - button "Work graph" [ref=e24] [cursor=pointer]
+      - button "Knowledge" [ref=e30] [cursor=pointer]
+      - button "Models & spend" [ref=e43] [cursor=pointer]
+      - button "Approvals 2" [ref=e48] [cursor=pointer]:
+        - text: Approvals
+        - generic [ref=e52]: "2"
+    - generic [ref=e53]:
+      - generic [ref=e56]:
+        - generic [ref=e57]: Hermes Gateway
+        - generic [ref=e58]: Running · 4h 12m
+      - button "Settings" [ref=e62] [cursor=pointer]
+  - main [ref=e66]:
+    - generic [ref=e67]:
+      - generic [ref=e68]:
+        - generic [ref=e69]: MONDAY, 24 AUGUST 2026 · 09:44 AWST
+        - heading "Good morning, Judah." [level=1] [ref=e70]
+      - generic [ref=e71]:
+        - button [ref=e72]
+        - button [ref=e76]
+        - generic [ref=e80]: JR
+    - generic [ref=e81]:
+      - generic [ref=e82]:
+        - generic [ref=e83]: CEO BRIEFING
+        - heading [level=2] [ref=e87]:
+          - text: Momentum is good.
+          - emphasis [ref=e88]: Two decisions need you.
+        - paragraph [ref=e89]: Q3 Growth Intelligence is on track. The research team found a 23% pricing gap across your top three competitors.
+        - button "Open CEO briefing" [ref=e90]
+      - generic [ref=e93]: CEO
+    - generic [ref=e101]:
+      - generic [ref=e105]:
+        - generic [ref=e106]: Live workforce
+        - strong [ref=e107]: 4 / 5
+        - generic [ref=e108]: agents active
+      - generic [ref=e114]:
+        - generic [ref=e115]: Tasks in flight
+        - strong [ref=e116]: "12"
+        - generic [ref=e117]: 3 blocked
+      - generic [ref=e122]:
+        - generic [ref=e123]: Today’s spend
+        - strong [ref=e124]: $8.42
+        - generic [ref=e125]: of $50 budget
+      - generic [ref=e131]:
+        - generic [ref=e132]: Knowledge health
+        - strong [ref=e133]: 94%
+        - generic [ref=e134]: synced · 2m ago
+    - generic [ref=e135]:
+      - generic [ref=e136]:
+        - generic [ref=e137]:
+          - generic [ref=e138]:
+            - generic [ref=e139]: WORKFORCE
+            - heading "Who’s doing what" [level=3] [ref=e140]
+          - button "View organisation" [ref=e141] [cursor=pointer]
+        - generic [ref=e144]:
+          - generic [ref=e145]:
+            - generic [ref=e146]: H
+            - generic [ref=e147]:
+              - generic [ref=e148]: CEO
+              - generic [ref=e149]: Strategic Orchestrator · Executive
+            - generic [ref=e150]: working
+            - generic [ref=e152]:
+              - generic [ref=e153]: Reviewing quarterly growth plan
+              - generic [ref=e154]: claude-opus-4
+          - generic [ref=e157]:
+            - generic [ref=e158]: MC
+            - generic [ref=e159]:
+              - generic [ref=e160]: Mara Chen
+              - generic [ref=e161]: Technical SEO Specialist · Growth
+            - generic [ref=e162]: working
+            - generic [ref=e164]:
+              - generic [ref=e165]: Crawling hyperlabs.com.au
+              - generic [ref=e166]: gpt-5
+          - generic [ref=e169]:
+            - generic [ref=e170]: EV
+            - generic [ref=e171]:
+              - generic [ref=e172]: Elias Voss
+              - generic [ref=e173]: Research Analyst · Research
+            - generic [ref=e174]: working
+            - generic [ref=e176]:
+              - generic [ref=e177]: Comparing three competitors
+              - generic [ref=e178]: gemini-2.5-pro
+          - generic [ref=e181]:
+            - generic [ref=e182]: "NO"
+            - generic [ref=e183]:
+              - generic [ref=e184]: Nia Okafor
+              - generic [ref=e185]: CRO Strategist · Growth
+            - generic [ref=e186]: waiting
+            - generic [ref=e188]:
+              - generic [ref=e189]: Waiting on research findings
+              - generic [ref=e190]: claude-sonnet-4
+          - generic [ref=e193]:
+            - generic [ref=e194]: TP
+            - generic [ref=e195]:
+              - generic [ref=e196]: Theo Park
+              - generic [ref=e197]: Systems Engineer · Engineering
+            - generic [ref=e198]: idle
+            - generic [ref=e200]:
+              - generic [ref=e201]: Available for delegation
+              - generic [ref=e202]: deepseek-v3
+      - generic [ref=e205]:
+        - generic [ref=e206]:
+          - generic [ref=e207]:
+            - generic [ref=e208]: LIVE FEED
+            - heading "Organisational activity" [level=3] [ref=e209]
+          - generic [ref=e210]: LIVE
+        - generic [ref=e212]:
+          - generic [ref=e213]:
+            - time [ref=e214]: 09:42:18
+            - generic [ref=e216]:
+              - text: CEO
+              - paragraph [ref=e217]: Delegated “technical search audit” to Mara Chen
+          - generic [ref=e218]:
+            - time [ref=e219]: 09:41:52
+            - generic [ref=e221]:
+              - text: Elias Voss
+              - paragraph [ref=e222]: Completed competitor pricing matrix
+          - generic [ref=e223]:
+            - time [ref=e224]: 09:40:07
+            - generic [ref=e226]:
+              - text: System
+              - paragraph [ref=e227]: "Model fallback: Gemini → Claude Sonnet"
+          - generic [ref=e228]:
+            - time [ref=e229]: 09:38:44
+            - generic [ref=e231]:
+              - text: Nia Okafor
+              - paragraph [ref=e232]: Blocked · awaiting research/competitors.md
+          - generic [ref=e233]:
+            - time [ref=e234]: 09:36:12
+            - generic [ref=e236]:
+              - text: CEO
+              - paragraph [ref=e237]: Created project “Q3 Growth Intelligence”
+        - button "Open work graph" [ref=e238] [cursor=pointer]
+    - generic [ref=e241]:
+      - generic [ref=e242]:
+        - generic [ref=e243]: H
+        - generic [ref=e244]:
+          - generic [ref=e245]: Talk to CEO
+          - generic [ref=e246]: Strategic Orchestrator · ready
+      - generic [ref=e247]:
+        - textbox "Give the CEO a directive…" [ref=e248]
+        - button [ref=e249]
+      - button "⌘ K" [ref=e253]

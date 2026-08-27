@@ -1,0 +1,2 @@
+.mobile-thread-back{display:none;transform:rotate(180deg)}
+@media(max-width:720px){.command-shell.mobile-chat .conversation-sidebar{display:none}.command-shell.mobile-chat .message-panel{display:flex;height:100svh}.command-shell.mobile-chat .mobile-thread-back{display:inline-grid}.command-shell.mobile-chat .message-stream{padding:28px 16px}.command-shell.mobile-chat .composer-wrap{padding:0 12px 12px}.command-shell.mobile-chat .message-header{padding:0 12px}.command-shell.mobile-chat .agent-run-panel{margin-top:32px}}

@@ -1,0 +1,12 @@
+node_modules/
+dist/
+release/
+desktop-build/
+.desktop-pyinstaller/
+.venv/
+.env
+state/
+*.egg-info/
+.pytest_cache/
+__pycache__/
+.DS_Store

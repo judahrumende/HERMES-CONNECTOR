@@ -1,0 +1,86 @@
+- generic [ref=e66]:
+  - banner [ref=e67]:
+    - generic [ref=e68]:
+      - text: Hermes
+      - generic [ref=e70]: JARVIS
+    - generic [ref=e71]:
+      - button "Search" [ref=e72] [cursor=pointer]
+      - button "New conversation" [ref=e76] [cursor=pointer]
+      - button "Menu" [ref=e78] [cursor=pointer]
+  - generic [ref=e81]:
+    - complementary [ref=e82]:
+      - generic [ref=e83]:
+        - generic [ref=e84]: CONVERSATIONS
+        - button [ref=e85] [cursor=pointer]
+      - generic [ref=e87]:
+        - generic [ref=e88]:
+          - generic [ref=e89]: H
+          - generic [ref=e90]: CEO
+        - generic [ref=e91]:
+          - generic [ref=e92]: MC
+          - generic [ref=e93]: Mara
+        - generic [ref=e94]:
+          - generic [ref=e95]: R
+          - generic [ref=e96]: Research
+        - generic [ref=e97]:
+          - generic [ref=e98]: C
+          - generic [ref=e99]: Chief of
+      - textbox [ref=e104]:
+        - /placeholder: Search conversations
+      - generic [ref=e105]:
+        - button "H CEO Strategic Orchestrator I’ve reviewed the current operating picture. now" [ref=e106] [cursor=pointer]:
+          - generic [ref=e107]: H
+          - generic [ref=e108]:
+            - generic [ref=e109]: CEO
+            - generic [ref=e110]: Strategic Orchestrator
+            - emphasis [ref=e111]: I’ve reviewed the current operating picture.
+          - time [ref=e112]: now
+        - button "MC Mara Chen Technical SEO Specialist Crawling the latest site map now. 2h" [ref=e113] [cursor=pointer]:
+          - generic [ref=e114]: MC
+          - generic [ref=e115]:
+            - generic [ref=e116]: Mara Chen
+            - generic [ref=e117]: Technical SEO Specialist
+            - emphasis [ref=e118]: Crawling the latest site map now.
+          - time [ref=e119]: 2h
+        - button "R Research room 3 members · shared context Quarterly competitor scan 12h" [ref=e120] [cursor=pointer]:
+          - generic [ref=e121]: R
+          - generic [ref=e122]:
+            - generic [ref=e123]: Research room
+            - generic [ref=e124]: 3 members · shared context
+            - emphasis [ref=e125]: Quarterly competitor scan
+          - time [ref=e126]: 12h
+        - button "C Chief of Staff Operations Daily brief is ready for review. 12h" [ref=e127] [cursor=pointer]:
+          - generic [ref=e128]: C
+          - generic [ref=e129]:
+            - generic [ref=e130]: Chief of Staff
+            - generic [ref=e131]: Operations
+            - emphasis [ref=e132]: Daily brief is ready for review.
+          - time [ref=e133]: 12h
+        - button "N Nia Okafor CRO Strategist Waiting on research findings 12h" [ref=e134] [cursor=pointer]:
+          - generic [ref=e135]: "N"
+          - generic [ref=e136]:
+            - generic [ref=e137]: Nia Okafor
+            - generic [ref=e138]: CRO Strategist
+            - emphasis [ref=e139]: Waiting on research findings
+          - time [ref=e140]: 12h
+      - generic [ref=e143]:
+        - generic [ref=e144]: Local messaging shell
+        - generic [ref=e145]: XMTP connector not configured
+    - generic [ref=e146]:
+      - generic [ref=e147]:
+        - generic [ref=e148]: H
+        - generic [ref=e149]:
+          - generic [ref=e150]: CEO
+          - generic [ref=e151]: Hermes agent · isolated context
+        - button [ref=e152] [cursor=pointer]
+      - generic [ref=e155]:
+        - generic [ref=e156]: TODAY
+        - generic [ref=e157]:
+          - text: Hello. I’m ready to coordinate the next useful piece of work.
+          - generic [ref=e158]: 09:42
+        - generic [ref=e159]: Agent conversations are isolated by design. Real delivery, encryption, QR invites, media, and voice require the messaging connector.
+      - generic [ref=e164]:
+        - button "Attach image" [ref=e165] [cursor=pointer]
+        - textbox "Message the CEO…" [ref=e167]
+        - button "Voice note" [ref=e168] [cursor=pointer]
+        - button [ref=e171] [cursor=pointer]
