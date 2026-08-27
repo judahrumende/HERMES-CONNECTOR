@@ -41,7 +41,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
 }
 
 function LandingPage({ onEnter }: { onEnter: () => void }) {
-  const desktopDownload = 'https://github.com/judahrumende/HERMES-CONNECTOR/releases/latest/download/Hermes.Jarvis-1.0.0-arm64.dmg';
+  const desktopDownload = 'https://github.com/judahrumende/HERMES-CONNECTOR/releases/latest/download/OrbityLabs-1.0.0-arm64.dmg';
   const connectCommand = 'npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs-connect http://127.0.0.1:8642';
   const [copied, setCopied] = useState(false);
   const copyCommand = async () => {
