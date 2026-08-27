@@ -32,8 +32,10 @@ async function waitForServer(url) {
 function startServer(port) {
   const bindHost = process.env.HERMES_JARVIS_BIND_HOST || '0.0.0.0';
   const packagedBinary = path.join(process.resourcesPath, 'server', 'hermes-jarvis-server');
+  const configFile = path.join(app.getPath('appData'), 'Hermes Jarvis', '.env');
   const env = {
     ...process.env,
+    HERMES_JARVIS_CONFIG_FILE: configFile,
     HERMES_JARVIS_STATE_DIR: app.getPath('userData'),
     HERMES_JARVIS_DIST_DIR: app.isPackaged ? path.join(process.resourcesPath, 'dist') : path.join(__dirname, '..', 'dist'),
   };
@@ -64,13 +66,13 @@ app.whenReady().then(async () => {
     serverProcess = startServer(port);
     serverProcess.once('exit', code => {
       if (code && mainWindow && !mainWindow.isDestroyed()) {
-        dialog.showErrorBox('Hermes Jarvis stopped', 'The local Hermes Jarvis bridge exited unexpectedly. Reopen the app to try again.');
+        dialog.showErrorBox('OrbityLabs stopped', 'The local OrbityLabs bridge exited unexpectedly. Reopen the app to try again.');
       }
     });
     await waitForServer(url);
     createWindow(url);
   } catch (error) {
-    dialog.showErrorBox('Hermes Jarvis could not start', error instanceof Error ? error.message : String(error));
+    dialog.showErrorBox('OrbityLabs could not start', error instanceof Error ? error.message : String(error));
     app.quit();
   }
 });
