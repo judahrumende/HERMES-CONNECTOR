@@ -6,7 +6,7 @@
   "main": "desktop/main.cjs",
   "scripts": {
     "dev": "vite",
-    "server": ".venv/bin/uvicorn hermes_jarvis.app:app --app-dir backend --host 127.0.0.1 --port 8787 --reload",
+    "server": ".venv/bin/uvicorn hermes_jarvis.app:app --app-dir backend --host 0.0.0.0 --port 8787 --reload",
     "build": "vite build",
     "start": ".venv/bin/uvicorn hermes_jarvis.app:app --app-dir backend --host 0.0.0.0 --port 8787",
     "preview": "vite preview",
