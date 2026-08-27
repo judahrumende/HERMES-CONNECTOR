@@ -40,7 +40,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
 }
 
 function LandingPage({ onEnter }: { onEnter: () => void }) {
-  const desktopDownload = 'https://github.com/judahrumende/hermes-jarvis/releases/latest/download/Hermes%20Jarvis-1.0.0-arm64.dmg';
+  const desktopDownload = 'https://github.com/judahrumende/HERMES-CONNECTOR/releases/latest/download/Hermes.Jarvis-1.0.0-arm64.dmg';
   const connectCommand = 'npm run hermes:connect -- http://127.0.0.1:8642';
   const [copied, setCopied] = useState(false);
   const copyCommand = async () => {
