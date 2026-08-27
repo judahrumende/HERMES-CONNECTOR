@@ -16,6 +16,7 @@
     "desktop:package": "node scripts/package-desktop.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.57.4",
     "@vitejs/plugin-react": "latest",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "latest",

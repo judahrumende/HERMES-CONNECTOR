@@ -1,6 +1,8 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import type { Session } from '@supabase/supabase-js';
+import { supabase, supabaseAuthConfigured } from './lib/supabase';
 import {
   Activity, AlertCircle, ArrowRight, Bell, Bot, Check, ChevronLeft, ChevronRight,
   Camera, Circle, CornerDownLeft, Database, Image as ImageIcon, Inbox, LayoutDashboard, ListFilter,
@@ -72,11 +74,51 @@ function useHermes() {
 
 export default function FinishedApp({ landing }: { landing: (onEnter: () => void) => React.ReactNode }) {
   const [inside, setInside] = useStored('hermes.inside.v2', false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authReady, setAuthReady] = useState(!supabaseAuthConfigured);
   const pairing = new URLSearchParams(location.search);
   const isPhone = matchMedia('(max-width: 720px)').matches;
   const paired = Boolean(localStorage.getItem('hermes.mobile.pairing'));
+  useEffect(() => {
+    if (!supabase) return;
+    let active = true;
+    supabase.auth.getSession().then(({ data }) => { if (active) { setSession(data.session); setAuthReady(true); } });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
+    return () => { active = false; listener.subscription.unsubscribe(); };
+  }, []);
   if (isPhone && (pairing.has('pair') || pairing.has('token') || !paired)) return <MobilePairing />;
-  return inside || (isPhone && paired) ? <Centre onExit={() => setInside(false)} mobileCompanion={isPhone && paired} /> : <>{landing(() => setInside(true))}</>;
+  if (!inside && !(isPhone && paired)) return <>{landing(() => setInside(true))}</>;
+  if (!supabaseAuthConfigured) return <AuthScreen configured={false} />;
+  if (!authReady) return <div className="auth-loading" role="status">Checking your session…</div>;
+  if (!session) return <AuthScreen configured />;
+  return <Centre onExit={() => setInside(false)} mobileCompanion={isPhone && paired} />;
+}
+
+function AuthScreen({ configured = true }: { configured?: boolean }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!supabase) return;
+    setBusy(true); setError(''); setMessage('');
+    const result = mode === 'signin'
+      ? await supabase.auth.signInWithPassword({ email: email.trim(), password })
+      : await supabase.auth.signUp({ email: email.trim(), password });
+    if (result.error) setError(result.error.message);
+    else if (mode === 'signup' && !result.data.session) setMessage('Check your email to confirm your account, then return here to sign in.');
+    setBusy(false);
+  };
+  const oauth = async (provider: 'google' | 'facebook') => {
+    if (!supabase) return;
+    setBusy(true); setError('');
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({ provider, options: { redirectTo: window.location.origin } });
+    if (oauthError) { setError(oauthError.message); setBusy(false); }
+  };
+  return <main className="auth-page"><section className="auth-card" aria-labelledby="auth-title"><div className="auth-brand"><span className="brand-orb" /><div><strong>Hermes Jarvis</strong><small>COMMAND CENTRE</small></div></div><div className="auth-copy"><span className="auth-eyebrow">OPERATOR ACCESS</span><h1 id="auth-title">Welcome back.</h1><p>Sign in to direct your organisation, review decisions, and keep authority with the operator.</p></div>{!configured ? <div className="auth-config-error" role="alert"><strong>Authentication is not configured.</strong><span>Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to your local or Vercel environment variables.</span></div> : <><div className="auth-socials"><button className="auth-provider" onClick={() => oauth('google')} disabled={busy}><span className="provider-letter google-letter">G</span> Continue with Google</button><button className="auth-provider" onClick={() => oauth('facebook')} disabled={busy}><span className="provider-letter facebook-letter">f</span> Continue with Facebook</button></div><div className="auth-divider"><span>or use email</span></div><form className="auth-form" onSubmit={submit}><label>Email address<input type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} placeholder="you@company.com" /></label><label>Password<input type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} minLength={8} required value={password} onChange={event => setPassword(event.target.value)} placeholder="8 characters minimum" /></label>{error && <div className="auth-error" role="alert">{error}</div>}{message && <div className="auth-success" role="status">{message}</div>}<button className="button button-primary auth-submit" disabled={busy}>{busy ? 'Working…' : mode === 'signin' ? 'Sign in' : 'Create account'} <ArrowRight size={14} /></button></form><button className="auth-mode" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage(''); }}>{mode === 'signin' ? 'New to Hermes? Create an account' : 'Already have an account? Sign in'}</button></>}<p className="auth-privacy">By continuing, you agree to your organisation’s access policy. Sessions are managed by Supabase Auth.</p></section></main>;
 }
 
 function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobileCompanion?: boolean }) {
