@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import './convos-app.css';
 import './branding.css';
+import './profile.css';
 
 type View = 'overview' | 'setup' | 'messages' | 'work' | 'agents' | 'knowledge' | 'approvals' | 'settings' | 'pairing';
 type Status = 'live' | 'idle' | 'blocked' | 'draft';
@@ -102,6 +103,12 @@ function SetupCelebration() {
   return <main className="setup-celebration" role="status" aria-live="polite"><div className="celebration-orbit"><span className="brand-orb" /><i /><i /><i /></div><span className="auth-eyebrow">CONNECTION VERIFIED</span><h1>OrbityLabs is ready.</h1><p>Your Hermes gateway is connected and the command centre is set up.</p></main>;
 }
 
+function ProfilePanel({ gateway, close, onExit }: { gateway: Gateway; close: () => void; onExit: () => void }) {
+  const connected = gateway.status === 'online';
+  const signOut = async () => { if (supabase) await supabase.auth.signOut(); close(); };
+  return <div className="profile-backdrop" onMouseDown={close}><section className="profile-panel" role="dialog" aria-modal="true" aria-labelledby="profile-title" onMouseDown={event => event.stopPropagation()}><header><div><span className="profile-avatar">JR</span><div><h2 id="profile-title">Judah Rumende</h2><p>Operator account</p></div></div><button className="icon-button" onClick={close} aria-label="Close profile"><X size={17} /></button></header><div className="profile-connection"><span className={`status-dot ${connected ? 'live' : 'idle'}`} /><div><strong>{connected ? 'Hermes connected' : 'Hermes not connected'}</strong><small>{connected ? gateway.base_url || 'Verified gateway' : 'Connect a gateway to enable live organisation work.'}</small></div></div><div className="profile-actions"><button className="button button-outline" onClick={onExit}>Return to company site</button>{supabase && <button className="button button-secondary" onClick={signOut}>Sign out</button>}</div></section></div>;
+}
+
 function AuthScreen({ configured = true }: { configured?: boolean }) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -137,8 +144,9 @@ function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobil
   const [roles, setRoles] = useStored<Role[]>('hermes.roles', roleSeed);
   const [sources, setSources] = useStored<Source[]>('hermes.sources', sourceSeed);
   const [setupDone, setSetupDone] = useStored<string[]>('hermes.setup.completed', []);
-  const [dialog, setDialog] = useState<Kind>(null), [search, setSearch] = useState(false), [notes, setNotes] = useState(false), [agent, setAgent] = useState(false), [menu, setMenu] = useState(false);
+  const [dialog, setDialog] = useState<Kind>(null), [search, setSearch] = useState(false), [notes, setNotes] = useState(false), [agent, setAgent] = useState(false), [profile, setProfile] = useState(false), [menu, setMenu] = useState(false);
   useEffect(() => { if (mobileCompanion) setView('messages'); }, [mobileCompanion, setView]);
+  useEffect(() => { const interceptProfile = (event: MouseEvent) => { const target = event.target as HTMLElement; if (target.closest('.profile-switcher, .topbar-actions .identity-avatar')) { event.preventDefault(); event.stopPropagation(); setProfile(true); } }; addEventListener('click', interceptProfile, true); return () => removeEventListener('click', interceptProfile, true); }, []);
   useEffect(() => { const fn = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearch(true); } if (e.key === 'Escape') { setSearch(false); setNotes(false); setDialog(null); } }; addEventListener('keydown', fn); return () => removeEventListener('keydown', fn); }, []);
   const goSettings = () => setView('settings');
   const openThread = (id: string) => { setActiveRole(id); setView('messages'); setMenu(false); };
@@ -156,6 +164,7 @@ function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobil
       {view === 'settings' && <SettingsView gateway={hermes.status} refresh={hermes.refresh} configure={() => setDialog('connection')} job={() => setDialog('job')} />}
     </div></main>{!mobileCompanion && <nav className="mobile-app-nav" aria-label="Mobile command centre"><button className={view === 'overview' ? 'active' : ''} onClick={() => setView('overview')}><MessageSquare size={20} /><span>Convos</span></button><button className={view === 'setup' ? 'active' : ''} onClick={() => setView('setup')}><ListChecks size={20} /><span>Steps</span></button><button className="mobile-compose" onClick={() => setDialog('directive')} aria-label="New directive"><Pencil size={20} /></button><button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}><Inbox size={20} /><span>Work</span></button><button className={view === 'settings' ? 'active' : ''} onClick={goSettings}><Settings size={20} /><span>More</span></button></nav>}
     {menu && <button className="mobile-menu-scrim" aria-label="Close navigation" onClick={() => setMenu(false)} />}
+    {profile && <ProfilePanel gateway={hermes.status} close={() => setProfile(false)} onExit={onExit} />}
     {agent && <AgentPanel gateway={hermes.status} events={hermes.events} close={() => setAgent(false)} />}
     {notes && <Popover title="Notifications" close={() => setNotes(false)}>{hermes.events.length ? hermes.events.slice(0, 5).map((e, i) => <div className="popover-row" key={i}><strong>{e.type}</strong><small>{e.at ? time(e.at) : 'Now'}</small></div>) : <Empty title="No notifications" copy="Verified connection and run events will appear here." />}</Popover>}
     {search && <Palette close={() => setSearch(false)} select={v => { setView(v); setSearch(false); }} />}
