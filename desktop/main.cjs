@@ -51,7 +51,7 @@ function createWindow(url) {
     minWidth: 1000,
     minHeight: 680,
     backgroundColor: '#ffffff',
-    title: 'Hermes Jarvis',
+    title: 'OrbityLabs',
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   mainWindow.loadURL(url);

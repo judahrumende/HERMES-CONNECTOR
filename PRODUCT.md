@@ -12,11 +12,11 @@ The primary user is the operator who sets organisational direction, supervises a
 
 ## Product Purpose
 
-Hermes Jarvis is a human-facing command centre for an autonomous AI organisation. It lets an operator communicate with a persistent AI CEO and specialised agents, understand current work, review decisions and blockers, and oversee execution that continues independently of a browser session.
+OrbityLabs is a human-facing command centre for an autonomous AI organisation. It lets an operator communicate with a persistent AI CEO and specialised agents, understand current work, review decisions and blockers, and oversee execution that continues independently of a browser session.
 
 ## Positioning
 
-Hermes Jarvis organises durable Hermes profiles as an operating company rather than presenting one chatbot with temporary subagents. The organisation, agents, work, knowledge, and decisions are intended to persist across sessions and remain observable to the operator.
+OrbityLabs organises durable Hermes profiles as an operating company rather than presenting one chatbot with temporary subagents. The organisation, agents, work, knowledge, and decisions are intended to persist across sessions and remain observable to the operator.
 
 ## Operating Context
 
@@ -33,7 +33,7 @@ The product is used from a web interface alongside Hermes Agent and Hermes Gatew
 
 ## Brand Commitments
 
-The product name is Hermes Jarvis. The interface should feel precise, operational, calm, and executive rather than playful or chatbot-like. The user supplied a Linear-inspired dark-first design system as the binding visual direction for the current redesign.
+The product name is OrbityLabs. Hermes remains the connected runtime and gateway name. The interface should feel precise, operational, calm, and executive rather than playful or chatbot-like. The user supplied a Linear-inspired dark-first design system as the binding visual direction for the current redesign.
 
 ## Evidence on Hand
 

@@ -1,5 +1,5 @@
 {
-  "name": "hermes-jarvis",
+  "name": "orbitylabs",
   "private": true,
   "version": "1.0.0",
   "type": "module",
@@ -34,8 +34,8 @@
     "vitest": "latest"
   },
   "build": {
-    "appId": "com.hermesjarvis.commandcentre",
-    "productName": "Hermes Jarvis",
+    "appId": "com.orbitylabs.commandcentre",
+    "productName": "OrbityLabs",
     "directories": {
       "output": "release"
     },

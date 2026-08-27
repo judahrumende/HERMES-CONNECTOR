@@ -8,6 +8,7 @@ import {
   ShieldCheck, SlidersHorizontal, Sparkles, Users, X, Zap,
 } from 'lucide-react';
 import './linear.css';
+import './branding.css';
 import FinishedApp from './finished-app';
 
 type View = 'overview' | 'messages' | 'work' | 'agents' | 'knowledge' | 'approvals' | 'settings';
@@ -36,7 +37,7 @@ function App() {
 }
 
 function Brand({ compact = false }: { compact?: boolean }) {
-  return <span className="brand-lockup"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>{!compact && <span>Hermes Jarvis</span>}</span>;
+  return <span className="brand-lockup"><span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>{!compact && <span>OrbityLabs</span>}</span>;
 }
 
 function LandingPage({ onEnter }: { onEnter: () => void }) {
@@ -65,10 +66,10 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
             <h1>The operating system for an autonomous AI organisation.</h1>
             <p>Persistent agents, visible work, and human authority—assembled into one command centre.</p>
             <div className="hero-actions"><button className="button button-secondary" onClick={onEnter}>Explore the interface <ArrowRight size={14} /></button><a href={desktopDownload} className="text-link">Download for Mac <ArrowRight size={14} /></a><a href="#system" className="text-link">See the system <ChevronDown size={14} /></a></div>
-            <div className="landing-install" aria-label="Install Hermes Jarvis">
+            <div className="landing-install" aria-label="Install OrbityLabs">
               <div className="landing-install-heading"><span className="mono">QUICK CONNECT</span><span>Run this in Terminal</span></div>
               <div className="landing-command"><span className="landing-command-label">Bash</span><code>{connectCommand}</code><button className="landing-copy" onClick={copyCommand} aria-label="Copy Hermes connection command" title="Copy command">{copied ? <Check size={18} /> : <span className="copy-glyph" />}</button></div>
-              <a className="landing-download" href={desktopDownload}><span><strong>Hermes Jarvis for Mac</strong><small>Apple Silicon · DMG installer</small></span><ArrowRight size={17} /></a>
+              <a className="landing-download" href={desktopDownload}><span><strong>OrbityLabs for Mac</strong><small>Apple Silicon · DMG installer</small></span><ArrowRight size={17} /></a>
             </div>
           </div>
           <div className="hero-stage" id="system"><ProductScene /></div>
@@ -84,7 +85,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
         </section>
 
         <section className="control-section" id="control">
-          <div className="control-copy"><h2>Complex work should remain legible.</h2><p>Hermes Jarvis is designed to show the organisation as it is: what is connected, what is waiting, where work sits, and which decisions still belong to a person.</p><button className="button button-outline" onClick={onEnter}>Inspect the command centre <ArrowRight size={14} /></button></div>
+          <div className="control-copy"><h2>Complex work should remain legible.</h2><p>OrbityLabs is designed to show the organisation as it is: what is connected, what is waiting, where work sits, and which decisions still belong to a person.</p><button className="button button-outline" onClick={onEnter}>Inspect the command centre <ArrowRight size={14} /></button></div>
           <WorkflowPreview />
         </section>
       </main>

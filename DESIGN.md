@@ -1,5 +1,5 @@
 ---
-name: Hermes Jarvis
+name: OrbityLabs
 description: A dark-first operational interface for directing an autonomous AI organisation.
 colors:
   void: "#08090a"
@@ -146,13 +146,13 @@ components:
     height: "36px"
 ---
 
-# Design System: Hermes Jarvis
+# Design System: OrbityLabs
 
 ## Overview
 
 **Creative North Star: "The Quiet Command Centre"**
 
-Hermes Jarvis uses a Linear-inspired operational world: dark, dense, precise, and calm. The interface should feel like a place where consequential work is observed and directed, with hierarchy created through tonal surfaces, hairline divisions, compact data rows, and disciplined typography rather than decorative effects.
+OrbityLabs uses a Linear-inspired operational world: dark, dense, precise, and calm. The interface should feel like a place where consequential work is observed and directed, with hierarchy created through tonal surfaces, hairline divisions, compact data rows, and disciplined typography rather than decorative effects. Hermes remains the connected runtime and gateway name.
 
 The landing page and command centre share the same visual grammar. Product UI is the illustration language; capability is demonstrated through real interface components, layered inspectors, work queues, metadata rails, and explicit empty states—never stock imagery or invented operational metrics.
 
