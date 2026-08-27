@@ -30,6 +30,7 @@ async function waitForServer(url) {
 }
 
 function startServer(port) {
+  const bindHost = process.env.HERMES_JARVIS_BIND_HOST || '0.0.0.0';
   const packagedBinary = path.join(process.resourcesPath, 'server', 'hermes-jarvis-server');
   const env = {
     ...process.env,
@@ -37,10 +38,10 @@ function startServer(port) {
     HERMES_JARVIS_DIST_DIR: app.isPackaged ? path.join(process.resourcesPath, 'dist') : path.join(__dirname, '..', 'dist'),
   };
   if (app.isPackaged) {
-    return spawn(packagedBinary, ['--host', '127.0.0.1', '--port', String(port)], { env, stdio: 'ignore' });
+    return spawn(packagedBinary, ['--host', bindHost, '--port', String(port)], { env, stdio: 'ignore' });
   }
   const python = process.env.HERMES_JARVIS_PYTHON || path.join(__dirname, '..', '.venv', 'bin', 'python');
-  return spawn(python, ['-m', 'uvicorn', 'hermes_jarvis.app:app', '--app-dir', path.join(__dirname, '..', 'backend'), '--host', '127.0.0.1', '--port', String(port)], { env, stdio: 'inherit' });
+  return spawn(python, ['-m', 'uvicorn', 'hermes_jarvis.app:app', '--app-dir', path.join(__dirname, '..', 'backend'), '--host', bindHost, '--port', String(port)], { env, stdio: 'inherit' });
 }
 
 function createWindow(url) {

@@ -1,13 +1,15 @@
 import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 import {
   Activity, AlertCircle, ArrowRight, Bell, Bot, Check, ChevronLeft, ChevronRight,
   Camera, Circle, CornerDownLeft, Database, Image as ImageIcon, Inbox, LayoutDashboard, ListFilter,
   ListChecks, Menu, MessageSquare, Mic, Minimize2, Network, Paperclip, Pencil, Plus, RefreshCw, Search, Send,
-  Settings, ShieldCheck, Sparkles, UserPlus, Users, X, Zap, Copy as CopyIcon,
+  Settings, ShieldCheck, Sparkles, UserPlus, Users, X, Zap, Copy as CopyIcon, ScanLine, Smartphone, Laptop,
 } from 'lucide-react';
 import './convos-app.css';
 
-type View = 'overview' | 'setup' | 'messages' | 'work' | 'agents' | 'knowledge' | 'approvals' | 'settings';
+type View = 'overview' | 'setup' | 'messages' | 'work' | 'agents' | 'knowledge' | 'approvals' | 'settings' | 'pairing';
 type Status = 'live' | 'idle' | 'blocked' | 'draft';
 type Kind = 'directive' | 'task' | 'role' | 'source' | 'connection' | 'job' | null;
 type Gateway = { status: 'loading' | 'bridge_offline' | 'not_configured' | 'unknown' | 'offline' | 'online'; base_url?: string | null; checked_at?: string | null; models?: unknown; jobs?: unknown; error?: string | null };
@@ -36,7 +38,7 @@ const sourceSeed: Source[] = [
 const nav: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'setup', label: 'Steps to do', icon: ListChecks }, { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'work', label: 'Work', icon: Inbox }, { id: 'agents', label: 'Agents', icon: Bot },
-  { id: 'knowledge', label: 'Knowledge', icon: Database }, { id: 'approvals', label: 'Approvals', icon: ShieldCheck },
+  { id: 'knowledge', label: 'Knowledge', icon: Database }, { id: 'approvals', label: 'Approvals', icon: ShieldCheck }, { id: 'pairing', label: 'Pairing', icon: ScanLine },
 ];
 
 function useStored<T>(key: string, initial: T) {
@@ -70,10 +72,14 @@ function useHermes() {
 
 export default function FinishedApp({ landing }: { landing: (onEnter: () => void) => React.ReactNode }) {
   const [inside, setInside] = useStored('hermes.inside.v2', false);
-  return inside ? <Centre onExit={() => setInside(false)} /> : <>{landing(() => setInside(true))}</>;
+  const pairing = new URLSearchParams(location.search);
+  const isPhone = matchMedia('(max-width: 720px)').matches;
+  const paired = Boolean(localStorage.getItem('hermes.mobile.pairing'));
+  if (isPhone && (pairing.has('pair') || pairing.has('token') || !paired)) return <MobilePairing />;
+  return inside || (isPhone && paired) ? <Centre onExit={() => setInside(false)} mobileCompanion={isPhone && paired} /> : <>{landing(() => setInside(true))}</>;
 }
 
-function Centre({ onExit }: { onExit: () => void }) {
+function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobileCompanion?: boolean }) {
   const hermes = useHermes();
   const [view, setView] = useStored<View>('hermes.view', 'overview');
   const [activeRole, setActiveRole] = useStored('hermes.active.role', 'ceo');
@@ -82,10 +88,11 @@ function Centre({ onExit }: { onExit: () => void }) {
   const [sources, setSources] = useStored<Source[]>('hermes.sources', sourceSeed);
   const [setupDone, setSetupDone] = useStored<string[]>('hermes.setup.completed', []);
   const [dialog, setDialog] = useState<Kind>(null), [search, setSearch] = useState(false), [notes, setNotes] = useState(false), [agent, setAgent] = useState(false), [menu, setMenu] = useState(false);
+  useEffect(() => { if (mobileCompanion) setView('messages'); }, [mobileCompanion, setView]);
   useEffect(() => { const fn = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setSearch(true); } if (e.key === 'Escape') { setSearch(false); setNotes(false); setDialog(null); } }; addEventListener('keydown', fn); return () => removeEventListener('keydown', fn); }, []);
   const goSettings = () => setView('settings');
   const openThread = (id: string) => { setActiveRole(id); setView('messages'); setMenu(false); };
-  return <div className="command-app convos-command"><aside className={`app-sidebar convos-sidebar ${menu ? 'mobile-open' : ''}`}><header className="convos-brand"><button className="brand-button" onClick={() => setView('overview')}><span className="brand-orb" /><strong>Hermes</strong></button><button className="icon-button" aria-label="Close navigation" onClick={() => setMenu(false)}><X size={20} /></button></header><button className="command-search" onClick={() => setSearch(true)}><Search size={17} /><span>Search Hermes</span><kbd>⌘ K</kbd></button><nav aria-label="Command centre"><span className="nav-label">Command centre</span>{nav.map(item => <Nav key={item.id} {...item} active={view === item.id} onClick={() => { setView(item.id); setMenu(false); }} />)}<span className="nav-label nav-label-spaced">System</span><Nav id="settings" label="Settings" icon={Settings} active={view === 'settings'} onClick={() => { goSettings(); setMenu(false); }} /></nav><div className="sidebar-spacer" /><button className="sidebar-connection" onClick={goSettings}><span className={`status-dot ${tone(hermes.status)}`} /><div><strong>{statusText(hermes.status)}</strong><small>{hermes.status.base_url || 'Local-only workspace'}</small></div></button><button className="new-convo-button" onClick={() => setDialog('directive')}><Pencil size={17} /> New directive</button><button className="profile-switcher" onClick={onExit}><span className="identity-avatar">JR</span><span><strong>Judah Rumende</strong><small>Return to company site</small></span></button></aside>
+  return <div className={`command-app convos-command ${mobileCompanion ? 'mobile-companion' : ''}`}><aside className={`app-sidebar convos-sidebar ${menu ? 'mobile-open' : ''}`}><header className="convos-brand"><button className="brand-button" onClick={() => setView('overview')}><span className="brand-orb" /><strong>Hermes</strong></button><button className="icon-button" aria-label="Close navigation" onClick={() => setMenu(false)}><X size={20} /></button></header><button className="command-search" onClick={() => setSearch(true)}><Search size={17} /><span>Search Hermes</span><kbd>⌘ K</kbd></button><nav aria-label="Command centre"><span className="nav-label">Command centre</span>{nav.map(item => <Nav key={item.id} {...item} active={view === item.id} onClick={() => { setView(item.id); setMenu(false); }} />)}<span className="nav-label nav-label-spaced">System</span><Nav id="settings" label="Settings" icon={Settings} active={view === 'settings'} onClick={() => { goSettings(); setMenu(false); }} /></nav><div className="sidebar-spacer" /><button className="sidebar-connection" onClick={goSettings}><span className={`status-dot ${tone(hermes.status)}`} /><div><strong>{statusText(hermes.status)}</strong><small>{hermes.status.base_url || 'Local-only workspace'}</small></div></button><button className="new-convo-button" onClick={() => setDialog('directive')}><Pencil size={17} /> New directive</button><button className="profile-switcher" onClick={onExit}><span className="identity-avatar">JR</span><span><strong>Judah Rumende</strong><small>Return to company site</small></span></button></aside>
     <main className={`app-main view-${view}`}><header className="app-topbar"><div className="mobile-brand"><button className="icon-button" aria-label="Open navigation" onClick={() => setMenu(true)}><Menu size={22} /></button><span className="brand-orb" /><strong>{view === 'overview' ? 'Hermes' : view === 'messages' ? roles.find(role => role.id === activeRole)?.name || 'Messages' : nav.find(n => n.id === view)?.label || 'Settings'}</strong></div><div className="breadcrumbs"><span>Hermes</span><ChevronRight size={12} /><strong>{view === 'settings' ? 'Settings' : nav.find(n => n.id === view)?.label}</strong></div><div className="topbar-actions"><button className="icon-button" aria-label="Search" onClick={() => setSearch(true)}><Search size={17} /></button><button className="icon-button" aria-label="Notifications" onClick={() => setNotes(v => !v)}><Bell size={17} /></button><button className="button button-quiet" onClick={() => setAgent(true)}><Sparkles size={15} /> Activity</button><button className="identity-avatar" aria-label="Return to landing page" onClick={onExit}>JR</button></div></header><div className="app-view">
       {view === 'overview' && <ConvoHome gateway={hermes.status} events={hermes.events} roles={roles} openThread={openThread} go={setView} newDirective={() => setDialog('directive')} />}
       {view === 'setup' && <SetupGuide gateway={hermes.status} completed={setupDone} setCompleted={setSetupDone} configure={() => setDialog('connection')} createJob={() => setDialog('job')} refresh={hermes.refresh} go={setView} />}
@@ -94,8 +101,9 @@ function Centre({ onExit }: { onExit: () => void }) {
       {view === 'agents' && <Agents roles={roles} gateway={hermes.status} add={() => setDialog('role')} />}
       {view === 'knowledge' && <Knowledge sources={sources} add={() => setDialog('source')} />}
       {view === 'approvals' && <Approvals settings={goSettings} />}
+      {view === 'pairing' && <PairingView />}
       {view === 'settings' && <SettingsView gateway={hermes.status} refresh={hermes.refresh} configure={() => setDialog('connection')} job={() => setDialog('job')} />}
-    </div></main><nav className="mobile-app-nav" aria-label="Mobile command centre"><button className={view === 'overview' ? 'active' : ''} onClick={() => setView('overview')}><MessageSquare size={20} /><span>Convos</span></button><button className={view === 'setup' ? 'active' : ''} onClick={() => setView('setup')}><ListChecks size={20} /><span>Steps</span></button><button className="mobile-compose" onClick={() => setDialog('directive')} aria-label="New directive"><Pencil size={20} /></button><button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}><Inbox size={20} /><span>Work</span></button><button className={view === 'settings' ? 'active' : ''} onClick={goSettings}><Settings size={20} /><span>More</span></button></nav>
+    </div></main>{!mobileCompanion && <nav className="mobile-app-nav" aria-label="Mobile command centre"><button className={view === 'overview' ? 'active' : ''} onClick={() => setView('overview')}><MessageSquare size={20} /><span>Convos</span></button><button className={view === 'setup' ? 'active' : ''} onClick={() => setView('setup')}><ListChecks size={20} /><span>Steps</span></button><button className="mobile-compose" onClick={() => setDialog('directive')} aria-label="New directive"><Pencil size={20} /></button><button className={view === 'work' ? 'active' : ''} onClick={() => setView('work')}><Inbox size={20} /><span>Work</span></button><button className={view === 'settings' ? 'active' : ''} onClick={goSettings}><Settings size={20} /><span>More</span></button></nav>}
     {menu && <button className="mobile-menu-scrim" aria-label="Close navigation" onClick={() => setMenu(false)} />}
     {agent && <AgentPanel gateway={hermes.status} events={hermes.events} close={() => setAgent(false)} />}
     {notes && <Popover title="Notifications" close={() => setNotes(false)}>{hermes.events.length ? hermes.events.slice(0, 5).map((e, i) => <div className="popover-row" key={i}><strong>{e.type}</strong><small>{e.at ? time(e.at) : 'Now'}</small></div>) : <Empty title="No notifications" copy="Verified connection and run events will appear here." />}</Popover>}
@@ -105,6 +113,32 @@ function Centre({ onExit }: { onExit: () => void }) {
 }
 
 function Nav({ label, icon: Icon, active, onClick }: { id: View; label: string; icon: React.ElementType; active: boolean; onClick: () => void }) { return <button className={`app-nav-item ${active ? 'active' : ''}`} onClick={onClick}><Icon size={15} /><span>{label}</span></button>; }
+type PairingInvite = { pairing_id: string; token: string; expires_at: number; lan_host?: string | null };
+
+function PairingView() {
+  const [invite, setInvite] = useState<PairingInvite | null>(null);
+  const [status, setStatus] = useState('Create a laptop pairing code for your phone.');
+  const create = async () => {
+    setStatus('Creating secure pairing code…');
+    try { const value = await fetch('/api/pairing/start', { method: 'POST' }).then(async r => { if (!r.ok) throw new Error('Could not create pairing code'); return r.json(); }); setInvite(value); setStatus(value.lan_host ? 'Open your phone camera and scan this code while both devices are on the same Wi-Fi.' : 'Pairing code created. Enter a laptop LAN address before scanning.'); } catch (e) { setStatus(e instanceof Error ? e.message : 'Could not create pairing code.'); }
+  };
+  useEffect(() => { create(); }, []);
+  const pairUrl = invite?.lan_host ? `${location.protocol}//${invite.lan_host}:${location.port}/?pair=${encodeURIComponent(invite.pairing_id)}&token=${encodeURIComponent(invite.token)}` : '';
+  return <div className="page pairing-page"><Head title="Pair a phone" copy="Your phone connects to this laptop command centre. Hermes credentials remain on the laptop." /><section className="pairing-layout"><div className="pairing-copy"><span className="pairing-mark"><Laptop size={18} /></span><h2>Pair your phone to this laptop.</h2><p>{status}</p><ol><li>Keep this laptop and phone on the same Wi-Fi network.</li><li>Open the companion scanner on your phone.</li><li>Scan this single-use code. It expires after five minutes.</li></ol><button className="button button-primary" onClick={create}><RefreshCw size={14} /> New pairing code</button></div><div className="pairing-code" aria-live="polite">{pairUrl ? <><QRCodeSVG value={pairUrl} size={248} level="M" includeMargin /><small>Single-use · local network only</small></> : <div className="pairing-unavailable"><AlertCircle size={20} /><span>Could not determine this laptop’s LAN address.</span></div>}</div></section></div>;
+}
+
+function MobilePairing() {
+  const params = new URLSearchParams(location.search);
+  const [message, setMessage] = useState(params.has('pair') ? 'Securing connection to your laptop…' : 'Scan the QR code shown in Pairing on your laptop.');
+  const [manualUrl, setManualUrl] = useState('');
+  const complete = async (pairingId: string, token: string) => {
+    try { const response = await fetch(`/api/pairing/${encodeURIComponent(pairingId)}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, device_name: 'Phone' }) }); const value = await response.json(); if (!response.ok) throw new Error(value.detail || 'Pairing could not be completed'); localStorage.setItem('hermes.mobile.pairing', JSON.stringify(value)); history.replaceState({}, '', location.pathname); setMessage('Paired. Opening messages…'); location.reload(); } catch (e) { setMessage(e instanceof Error ? e.message : 'Pairing could not be completed.'); }
+  };
+  useEffect(() => { const pairingId = params.get('pair'), token = params.get('token'); if (pairingId && token) void complete(pairingId, token); }, []);
+  useEffect(() => { if (params.has('pair')) return; let scanner: Html5QrcodeScanner | null = null; try { scanner = new Html5QrcodeScanner('pairing-scanner', { fps: 10, qrbox: { width: 220, height: 220 } }, false); scanner.render(text => { try { const url = new URL(text); if (url.searchParams.has('pair') && url.searchParams.has('token')) location.assign(url.toString()); else setMessage('That QR code is not a laptop pairing code.'); } catch { setMessage('That QR code is not a valid pairing link.'); } }, () => undefined); } catch { setMessage('Camera scanner unavailable. Paste the pairing link from your laptop instead.'); } return () => { void scanner?.clear(); }; }, []);
+  const openManual = () => { try { const url = new URL(manualUrl); location.assign(url.toString()); } catch { setMessage('Paste the full pairing link from your laptop.'); } };
+  return <main className="mobile-pairing"><header><span className="brand-orb" /><strong>Hermes</strong></header><section><span className="pairing-mark"><Smartphone size={20} /></span><h1>Connect to your laptop</h1><p>{message}</p>{!params.has('pair') && <><div id="pairing-scanner" className="pairing-scanner" /><div className="pairing-divider"><span>or paste pairing link</span></div><div className="manual-pair"><input value={manualUrl} onChange={e => setManualUrl(e.target.value)} placeholder="http://192.168…/?pair=…" /><button onClick={openManual}>Connect</button></div></>}</section></main>;
+}
 function Head({ title, copy, children }: { title: string; copy: string; children?: React.ReactNode }) { return <header className="page-header"><div><h1>{title}</h1><p>{copy}</p></div>{children && <div className="page-actions">{children}</div>}</header>; }
 function Panel({ title, subtitle }: { title: string; subtitle?: string }) { return <header className="panel-header"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div></header>; }
 function statusText(g: Gateway) { return g.status === 'online' ? 'Verified online' : g.status === 'bridge_offline' ? 'Bridge unavailable' : g.status === 'offline' ? 'Hermes unreachable' : g.status === 'loading' ? 'Checking…' : 'Not configured'; }
