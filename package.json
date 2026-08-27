@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "main": "desktop/main.cjs",
+  "bin": {
+    "orbitylabs-connect": "bin/orbitylabs-connect.mjs"
+  },
   "scripts": {
     "dev": "vite",
     "server": ".venv/bin/uvicorn hermes_jarvis.app:app --app-dir backend --host 0.0.0.0 --port 8787 --reload",

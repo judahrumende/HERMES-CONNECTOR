@@ -42,7 +42,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
 
 function LandingPage({ onEnter }: { onEnter: () => void }) {
   const desktopDownload = 'https://github.com/judahrumende/HERMES-CONNECTOR/releases/latest/download/Hermes.Jarvis-1.0.0-arm64.dmg';
-  const connectCommand = 'npm run hermes:connect -- http://127.0.0.1:8642';
+  const connectCommand = 'npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs-connect http://127.0.0.1:8642';
   const [copied, setCopied] = useState(false);
   const copyCommand = async () => {
     try {
@@ -89,7 +89,7 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
           <WorkflowPreview />
         </section>
       </main>
-      <footer className="site-footer"><Brand /><span>Autonomous work, made legible.</span><span className="mono">Connect: npm run hermes:connect -- http://127.0.0.1:8642</span><a className="mono" href={desktopDownload}>Download desktop · macOS arm64</a></footer>
+      <footer className="site-footer"><Brand /><span>Autonomous work, made legible.</span><span className="mono">Connect: npx orbitylabs-connect http://127.0.0.1:8642</span><a className="mono" href={desktopDownload}>Download desktop · macOS arm64</a></footer>
     </div>
   );
 }

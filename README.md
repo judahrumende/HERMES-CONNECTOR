@@ -18,7 +18,7 @@ Put the Hermes API key in `.env` as `HERMES_API_KEY`. Never use a `VITE_` prefix
 Once the local setup is complete, connect and verify a gateway with one command:
 
 ```bash
-npm run hermes:connect -- http://127.0.0.1:8642
+npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs-connect http://127.0.0.1:8642
 ```
 
 The command asks for the API key in a hidden terminal prompt, verifies `/health/detailed` before saving anything, and stores the connection in your private local Hermes Jarvis configuration. The web server and desktop app both read that same configuration. For gateways without bearer authentication, add `--no-key`.
