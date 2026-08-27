@@ -67,7 +67,7 @@ function useHermes() {
     return () => socket.close();
   }, []);
   return { status, events, refresh,
-    configure: async (base_url: string) => { const value = await request('/api/hermes/connection', { method: 'PUT', body: JSON.stringify({ base_url }) }); setStatus(value); },
+    configure: async (base_url: string) => { const value = await request('/api/hermes/connection', { method: 'PUT', body: JSON.stringify({ base_url }) }); setStatus(value); if (value.status === 'online') localStorage.setItem('orbitylabs.hermes.setup.pending', '1'); },
     run: (input: string, session_id: string) => request('/api/hermes/runs', { method: 'POST', body: JSON.stringify({ payload: { input, session_id } }) }),
     job: (payload: Record<string, string>) => request('/api/hermes/jobs', { method: 'POST', body: JSON.stringify({ payload }) }),
   };
@@ -75,11 +75,13 @@ function useHermes() {
 
 export default function FinishedApp({ landing }: { landing: (onEnter: () => void) => React.ReactNode }) {
   const [inside, setInside] = useStored('hermes.inside.v2', false);
+  const [showSetupCelebration, setShowSetupCelebration] = useState(() => { const pending = localStorage.getItem('orbitylabs.hermes.setup.pending') === '1'; if (pending) localStorage.removeItem('orbitylabs.hermes.setup.pending'); return pending; });
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(!supabaseAuthConfigured);
   const pairing = new URLSearchParams(location.search);
   const isPhone = matchMedia('(max-width: 720px)').matches;
   const paired = Boolean(localStorage.getItem('hermes.mobile.pairing'));
+  useEffect(() => { if (!showSetupCelebration) return; const timer = window.setTimeout(() => setShowSetupCelebration(false), 2000); return () => window.clearTimeout(timer); }, [showSetupCelebration]);
   useEffect(() => {
     if (!supabase) return;
     let active = true;
@@ -88,11 +90,16 @@ export default function FinishedApp({ landing }: { landing: (onEnter: () => void
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
   if (isPhone && (pairing.has('pair') || pairing.has('token') || !paired)) return <MobilePairing />;
+  if (showSetupCelebration) return <SetupCelebration />;
   if (!inside && !(isPhone && paired)) return <>{landing(() => setInside(true))}</>;
   if (!supabaseAuthConfigured) return <AuthScreen configured={false} />;
   if (!authReady) return <div className="auth-loading" role="status">Checking your session…</div>;
   if (!session) return <AuthScreen configured />;
   return <Centre onExit={() => setInside(false)} mobileCompanion={isPhone && paired} />;
+}
+
+function SetupCelebration() {
+  return <main className="setup-celebration" role="status" aria-live="polite"><div className="celebration-orbit"><span className="brand-orb" /><i /><i /><i /></div><span className="auth-eyebrow">CONNECTION VERIFIED</span><h1>OrbityLabs is ready.</h1><p>Your Hermes gateway is connected and the command centre is set up.</p></main>;
 }
 
 function AuthScreen({ configured = true }: { configured?: boolean }) {
