@@ -75,10 +75,11 @@ function useHermes() {
 }
 
 export default function FinishedApp({ landing }: { landing: (onEnter: () => void) => React.ReactNode }) {
-  const [inside, setInside] = useStored('hermes.inside.v2', false);
+  const isDesktop = typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron');
+  const [inside, setInside] = useStored('hermes.inside.v2', isDesktop);
   const [showSetupCelebration, setShowSetupCelebration] = useState(() => { const pending = localStorage.getItem('orbitylabs.hermes.setup.pending') === '1'; if (pending) localStorage.removeItem('orbitylabs.hermes.setup.pending'); return pending; });
   const [session, setSession] = useState<Session | null>(null);
-  const [authReady, setAuthReady] = useState(!supabaseAuthConfigured);
+  const [authReady, setAuthReady] = useState(isDesktop || !supabaseAuthConfigured);
   const pairing = new URLSearchParams(location.search);
   const isPhone = matchMedia('(max-width: 720px)').matches;
   const paired = Boolean(localStorage.getItem('hermes.mobile.pairing'));
@@ -92,10 +93,10 @@ export default function FinishedApp({ landing }: { landing: (onEnter: () => void
   }, []);
   if (isPhone && (pairing.has('pair') || pairing.has('token') || !paired)) return <MobilePairing />;
   if (showSetupCelebration) return <SetupCelebration />;
-  if (!inside && !(isPhone && paired)) return <>{landing(() => setInside(true))}</>;
-  if (!supabaseAuthConfigured) return <AuthScreen configured={false} />;
+  if (!inside && !isDesktop && !(isPhone && paired)) return <>{landing(() => setInside(true))}</>;
+  if (!isDesktop && !supabaseAuthConfigured) return <AuthScreen configured={false} />;
   if (!authReady) return <div className="auth-loading" role="status">Checking your session…</div>;
-  if (!session) return <AuthScreen configured />;
+  if (!isDesktop && !session) return <AuthScreen configured />;
   return <Centre onExit={() => setInside(false)} mobileCompanion={isPhone && paired} />;
 }
 
