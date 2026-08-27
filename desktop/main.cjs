@@ -1,10 +1,36 @@
-const { app, BrowserWindow, dialog } = require('electron');
+const { app, BrowserWindow, dialog, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const net = require('node:net');
 const path = require('node:path');
 
 let serverProcess;
 let mainWindow;
+let notifiedVersion = '';
+const releaseApi = 'https://api.github.com/repos/judahrumende/HERMES-CONNECTOR/releases/latest';
+
+async function checkForUpdate() {
+  try {
+    const response = await fetch(releaseApi, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'OrbityLabs' } });
+    if (!response.ok) return;
+    const release = await response.json();
+    const version = String(release.tag_name || '').replace(/^v/, '');
+    if (!version || version === app.getVersion()) return;
+    const asset = (release.assets || []).find(item => item.name === 'OrbityLabs-' + version + '-arm64.dmg');
+    if (asset && version !== notifiedVersion && mainWindow && !mainWindow.isDestroyed()) {
+      notifiedVersion = version;
+      const result = await dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'OrbityLabs update available',
+        message: 'OrbityLabs ' + version + ' is ready.',
+        detail: 'Download the latest desktop build to get the newest fixes.',
+        buttons: ['Update', 'Later'],
+        defaultId: 0,
+        cancelId: 1,
+      });
+      if (result.response === 0) await shell.openExternal(asset.browser_download_url);
+    }
+  } catch { /* Updates remain optional when GitHub is unavailable. */ }
+}
 
 function reservePort() {
   return new Promise((resolve, reject) => {
@@ -71,6 +97,8 @@ app.whenReady().then(async () => {
     });
     await waitForServer(url);
     createWindow(url);
+    void checkForUpdate();
+    setInterval(checkForUpdate, 15 * 60 * 1000);
   } catch (error) {
     dialog.showErrorBox('OrbityLabs could not start', error instanceof Error ? error.message : String(error));
     app.quit();
