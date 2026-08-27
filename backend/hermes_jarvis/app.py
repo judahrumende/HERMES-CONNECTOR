@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import secrets
 import socket
+import subprocess
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -71,11 +73,30 @@ class PairingCompletion(BaseModel):
 
 def local_address() -> str | None:
     """Best-effort LAN address for a QR opened by a phone on the same Wi-Fi."""
+    override = os.getenv("HERMES_JARVIS_LAN_HOST")
+    if override:
+        return override.strip() or None
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.connect(("8.8.8.8", 80))
-            return sock.getsockname()[0]
+            address = sock.getsockname()[0]
+            if not address.startswith("127."):
+                return address
     except OSError:
+        pass
+    try:
+        interfaces = subprocess.run(["ifconfig"], capture_output=True, text=True, timeout=2, check=False).stdout
+        preferred = ("en0", "en1", "bridge100", "en2")
+        blocks = re.split(r"\n(?=\S)", interfaces)
+        for name in preferred:
+            for block in blocks:
+                if block.startswith(f"{name}:"):
+                    match = re.search(r"\binet (10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.)[0-9.]+", block)
+                    if match:
+                        return match.group(0).split(" ")[-1]
+        match = re.search(r"\binet (10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.)[0-9.]+", interfaces)
+        return match.group(0).split(" ")[-1] if match else None
+    except (OSError, subprocess.SubprocessError):
         return None
 
 
