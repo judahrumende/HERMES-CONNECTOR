@@ -41,6 +41,17 @@ function Brand({ compact = false }: { compact?: boolean }) {
 
 function LandingPage({ onEnter }: { onEnter: () => void }) {
   const desktopDownload = 'https://github.com/judahrumende/hermes-jarvis/releases/latest/download/Hermes%20Jarvis-1.0.0-arm64.dmg';
+  const connectCommand = 'npm run hermes:connect -- http://127.0.0.1:8642';
+  const [copied, setCopied] = useState(false);
+  const copyCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(connectCommand);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
+  };
   return (
     <div className="landing">
       <header className="site-nav">
@@ -54,6 +65,11 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
             <h1>The operating system for an autonomous AI organisation.</h1>
             <p>Persistent agents, visible work, and human authority—assembled into one command centre.</p>
             <div className="hero-actions"><button className="button button-secondary" onClick={onEnter}>Explore the interface <ArrowRight size={14} /></button><a href={desktopDownload} className="text-link">Download for Mac <ArrowRight size={14} /></a><a href="#system" className="text-link">See the system <ChevronDown size={14} /></a></div>
+            <div className="landing-install" aria-label="Install Hermes Jarvis">
+              <div className="landing-install-heading"><span className="mono">QUICK CONNECT</span><span>Run this in Terminal</span></div>
+              <div className="landing-command"><span className="landing-command-label">Bash</span><code>{connectCommand}</code><button className="landing-copy" onClick={copyCommand} aria-label="Copy Hermes connection command" title="Copy command">{copied ? <Check size={18} /> : <span className="copy-glyph" />}</button></div>
+              <a className="landing-download" href={desktopDownload}><span><strong>Hermes Jarvis for Mac</strong><small>Apple Silicon · DMG installer</small></span><ArrowRight size={17} /></a>
+            </div>
           </div>
           <div className="hero-stage" id="system"><ProductScene /></div>
         </section>
