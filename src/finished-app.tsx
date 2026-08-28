@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import type { Session } from '@supabase/supabase-js';
@@ -21,6 +21,32 @@ type Task = { id: string; title: string; area: string; state: Status };
 type Role = { id: string; name: string; role: string; initials: string };
 type Source = { id: string; title: string; detail: string };
 type Event = { type: string; at?: string; data?: Record<string, unknown> };
+type ChatMessage = { text: string; direction: 'outgoing' | 'incoming'; status?: 'sent' | 'working' };
+
+function normalizeChatMessage(value: unknown): ChatMessage | null {
+  if (typeof value === 'string') return { text: value, direction: 'outgoing', status: 'sent' };
+  if (!value || typeof value !== 'object') return null;
+  const message = value as Partial<ChatMessage>;
+  return typeof message.text === 'string' && (message.direction === 'incoming' || message.direction === 'outgoing')
+    ? { text: message.text, direction: message.direction, status: message.status }
+    : null;
+}
+
+function extractResponseText(value: unknown, depth = 0): string | null {
+  if (depth > 4 || value === null || value === undefined) return null;
+  if (typeof value === 'string') return value.trim() || null;
+  if (Array.isArray(value)) {
+    const parts = value.map(item => extractResponseText(item, depth + 1)).filter(Boolean) as string[];
+    return parts.length ? parts.join('\n') : null;
+  }
+  if (typeof value !== 'object') return null;
+  const record = value as Record<string, unknown>;
+  for (const key of ['output', 'response', 'answer', 'reply', 'message', 'content', 'text', 'final']) {
+    const result = extractResponseText(record[key], depth + 1);
+    if (result) return result;
+  }
+  return null;
+}
 
 const nav: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'setup', label: 'Steps to do', icon: ListChecks }, { id: 'messages', label: 'Messages', icon: MessageSquare },
@@ -144,7 +170,7 @@ function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobil
     <main className={`app-main view-${view}`}><header className="app-topbar"><div className="mobile-brand"><button className="icon-button" aria-label="Open navigation" onClick={() => setMenu(true)}><Menu size={22} /></button><span className="brand-orb" /><strong>{view === 'overview' ? 'Hermes' : view === 'messages' ? roles.find(role => role.id === activeRole)?.name || 'Messages' : nav.find(n => n.id === view)?.label || 'Settings'}</strong></div><div className="breadcrumbs"><span>Hermes</span><ChevronRight size={12} /><strong>{view === 'settings' ? 'Settings' : nav.find(n => n.id === view)?.label}</strong></div><div className="topbar-actions"><button className="icon-button" aria-label="Search" onClick={() => setSearch(true)}><Search size={17} /></button><button className="icon-button" aria-label="Notifications" onClick={() => setNotes(v => !v)}><Bell size={17} /></button><button className="button button-quiet" onClick={() => setAgent(true)}><Sparkles size={15} /> Activity</button><button className="identity-avatar" aria-label="Return to landing page" onClick={onExit}>JR</button></div></header><div className="app-view">
       {view === 'overview' && <ConvoHome gateway={hermes.status} events={hermes.events} roles={roles} openThread={openThread} go={setView} newDirective={() => setDialog('directive')} />}
       {view === 'setup' && <SetupGuide gateway={hermes.status} completed={setupDone} setCompleted={setSetupDone} configure={() => setDialog('connection')} createJob={() => setDialog('job')} refresh={hermes.refresh} go={setView} />}
-      {view === 'messages' && <Messages gateway={hermes.status} roles={roles} activeRole={activeRole} setActiveRole={setActiveRole} closeThread={() => setView('overview')} run={hermes.run} settings={goSettings} addRole={() => setDialog('role')} addGroup={() => setDialog('group')} />}
+      {view === 'messages' && <Messages gateway={hermes.status} events={hermes.events} roles={roles} activeRole={activeRole} setActiveRole={setActiveRole} closeThread={() => setView('overview')} run={hermes.run} settings={goSettings} addRole={() => setDialog('role')} addGroup={() => setDialog('group')} />}
       {view === 'work' && <Work tasks={tasks} setTasks={setTasks} add={() => setDialog('task')} />}
       {view === 'agents' && <Agents roles={roles} gateway={hermes.status} add={() => setDialog('role')} />}
       {view === 'knowledge' && <Knowledge sources={sources} add={() => setDialog('source')} />}
@@ -320,16 +346,35 @@ function Strip({ icon: Icon, label, value, state }: { icon: React.ElementType; l
 function Queue({ title, state, children }: { title: string; state: Status; children: React.ReactNode }) { return <div className="queue-column"><header><span><span className={`status-ring ${state}`} />{title}</span></header>{children}</div>; }
 function Card({ title, area, state }: { title: string; area: string; state: Status }) { return <article className="work-card"><div><span className={`task-state ${state}`} /><strong>{title}</strong></div><footer><span className="quiet-badge">{area}</span></footer></article>; }
 
-function Messages({ gateway, roles, activeRole, setActiveRole, closeThread, run, settings, addRole, addGroup }: { gateway: Gateway; roles: Role[]; activeRole: string; setActiveRole: (id: string) => void; closeThread: () => void; run: (input: string, session: string) => Promise<unknown>; settings: () => void; addRole: () => void; addGroup: () => void }) {
-  const [draft, setDraft] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [skills, setSkills] = useState(false);
-  const [messages, setMessages] = useStored<Record<string,string[]>>('hermes.messages', {});
+function Messages({ gateway, events, roles, activeRole, setActiveRole, closeThread, run, settings, addRole, addGroup }: { gateway: Gateway; events: Event[]; roles: Role[]; activeRole: string; setActiveRole: (id: string) => void; closeThread: () => void; run: (input: string, session: string) => Promise<unknown>; settings: () => void; addRole: () => void; addGroup: () => void }) {
+  const [draft, setDraft] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [skills, setSkills] = useState(false), [pendingRun, setPendingRun] = useState('');
+  const [messages, setMessages] = useStored<Record<string, ChatMessage[]>>('hermes.messages', {});
+  const handledEvents = useRef(new Set<string>());
   const role = roles.find(r => r.id === activeRole) || roles[0];
+  const thread = (messages[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[];
+  useEffect(() => {
+    for (const item of events) {
+      if (item.type !== 'run.event' || !item.data) continue;
+      const runId = typeof item.data.run_id === 'string' ? item.data.run_id : '';
+      const event = typeof item.data.event === 'string' ? item.data.event : '';
+      const key = `${runId}:${event}:${JSON.stringify(item.data.data || {})}`;
+      if (!runId || handledEvents.current.has(key)) continue;
+      handledEvents.current.add(key);
+      if (runId !== pendingRun || /tool|thinking|started/i.test(event)) continue;
+      const responseText = extractResponseText(item.data.data);
+      if (responseText && !/^(queued|accepted|started|completed)$/i.test(responseText)) {
+        setMessages(current => ({ ...current, [activeRole]: [...(current[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text: responseText, direction: 'incoming', status: 'sent' }] }));
+        setPendingRun('');
+      }
+      if (/completed|failed|error|cancelled/i.test(event)) setPendingRun('');
+    }
+  }, [events, pendingRun, activeRole, setMessages]);
   if (!role) return <div className="messages-layout imessage-layout"><section className="thread-pane"><div className="compact-empty"><strong>No conversations yet</strong><p>Create or discover a real agent profile before sending a message.</p><button className="button button-outline" onClick={addRole}>Create an agent</button></div></section></div>;
-  const send = async () => { const text = draft.trim(); if (!text || busy) return; if (gateway.status !== 'online') { setError('Not sent. Hermes is not connected.'); return; } setBusy(true); setError(''); try { await run(text, `jarvis-${activeRole}`); setMessages(m => ({ ...m, [activeRole]: [...(m[activeRole] || []), text] })); setDraft(''); } catch (e) { setError(e instanceof Error ? e.message : 'Hermes did not accept the directive. It was not sent.'); } finally { setBusy(false); } };
+  const send = async () => { const text = draft.trim(); if (!text || busy) return; if (gateway.status !== 'online') { setError('Not sent. Hermes is not connected.'); return; } setBusy(true); setError(''); try { const result = await run(text, `jarvis-${activeRole}`); const runId = result && typeof result === 'object' && ('run_id' in result || 'id' in result) ? String((result as { run_id?: unknown; id?: unknown }).run_id || (result as { id?: unknown }).id || '') : ''; const responseText = extractResponseText(result); setMessages(m => ({ ...m, [activeRole]: [...(m[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text, direction: 'outgoing', status: 'sent' }] })); if (responseText && !runId) setMessages(m => ({ ...m, [activeRole]: [...(m[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text: responseText, direction: 'incoming', status: 'sent' }] })); setPendingRun(runId); setDraft(''); } catch (e) { setError(e instanceof Error ? e.message : 'Hermes did not accept the directive. It was not sent.'); } finally { setBusy(false); } };
   return <div className="messages-layout imessage-layout">
-    <aside className="conversation-pane"><header><div><h1>Messages</h1><p>{gateway.status === 'online' ? 'Hermes transport available' : 'Local-only conversations'}</p></div><button className="icon-button" onClick={addRole} aria-label="Add planned agent"><Pencil size={19} /></button></header><label className="message-search"><Search size={16} /><input placeholder="Search" onChange={() => undefined} /></label><div className="conversation-list">{roles.map((r, index) => <button key={r.id} className={`conversation-row ${activeRole === r.id ? 'selected' : ''}`} onClick={() => setActiveRole(r.id)}><AgentAvatar role={r} featured={index === 0} /><span><strong>{r.name}</strong><small>{r.role}</small><em>{(messages[r.id] || []).at(-1) || (gateway.status === 'online' ? 'Ready for a directive' : 'Saved locally')}</em></span><time>{activeRole === r.id ? 'Now' : ''}</time></button>)}</div></aside>
+    <aside className="conversation-pane"><header><div><h1>Messages</h1><p>{gateway.status === 'online' ? 'Hermes transport available' : 'Local-only conversations'}</p></div><button className="icon-button" onClick={addRole} aria-label="Add planned agent"><Pencil size={19} /></button></header><label className="message-search"><Search size={16} /><input placeholder="Search" onChange={() => undefined} /></label><div className="conversation-list">{roles.map((r, index) => { const last = (messages[r.id] || []).map(normalizeChatMessage).filter(Boolean).at(-1) as ChatMessage | undefined; return <button key={r.id} className={`conversation-row ${activeRole === r.id ? 'selected' : ''}`} onClick={() => setActiveRole(r.id)}><AgentAvatar role={r} featured={index === 0} /><span><strong>{r.name}</strong><small>{r.role}</small><em>{last?.text || (gateway.status === 'online' ? 'Ready for a directive' : 'Saved locally')}</em></span><time>{activeRole === r.id ? 'Now' : ''}</time></button>; })}</div></aside>
     <section className="thread-pane"><header className="thread-header"><div><button className="icon-button mobile-back" onClick={closeThread} aria-label="Back"><ChevronLeft size={23} /></button><AgentAvatar role={role} featured={role?.id === 'ceo'} /><span><strong>{role?.name}</strong><small>{gateway.status === 'online' ? 'Hermes available' : 'Local only'}</small></span></div><button className="thread-add" onClick={addGroup} aria-label="Create group chat" title="Create group chat"><Plus size={22} /></button></header>
-      <div className="thread-stream"><div className="thread-intro"><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h2>{role?.name}</h2><p>{role?.role}</p><button onClick={() => setSkills(true)}>See its controls</button></div><div className="system-message"><span className="mini-avatar">JR</span> You direct this agent · Authority stays with you</div>{(messages[activeRole] || []).map((message, index) => <div className="imessage-row outgoing" key={index}><div className="imessage-bubble">{message}</div><small>{gateway.status === 'online' ? 'Sent to Hermes' : 'Saved locally'}</small></div>)}{!(messages[activeRole] || []).length && <div className="agent-message"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>{gateway.status === 'online' ? 'What outcome should I coordinate for you?' : 'Connect Hermes to send verified directives. I will not simulate a reply while the runtime is offline.'}</p></div></div>}{error && <div className="form-error" role="alert">{error}</div>}</div>
+      <div className="thread-stream"><div className="thread-intro"><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h2>{role?.name}</h2><p>{role?.role}</p><button onClick={() => setSkills(true)}>See its controls</button></div><div className="system-message"><span className="mini-avatar">JR</span> You direct this agent · Authority stays with you</div>{thread.map((message, index) => <div className={`imessage-row ${message.direction}`} key={`${message.direction}-${index}`}><div className="imessage-bubble">{message.text}</div><small>{message.direction === 'incoming' ? 'Received from Hermes' : 'Sent to Hermes'}</small></div>)}{pendingRun && <div className="agent-message agent-working" role="status"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>Working on your directive…</p></div></div>}{!thread.length && !pendingRun && <div className="agent-message"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>{gateway.status === 'online' ? 'What outcome should I coordinate for you?' : 'Connect Hermes to send verified directives. I will not simulate a reply while the runtime is offline.'}</p></div></div>}{error && <div className="form-error" role="alert">{error}</div>}</div>
       <div className="composer-wrap"><div className="identity-selector"><span className="mini-avatar">JR</span><span>Chat as Judah</span></div><div className="composer"><button className="composer-tool" disabled title="Storage provider required" aria-label="Photo library"><ImageIcon size={20} /></button><button className="composer-tool" disabled title="Camera access is not configured" aria-label="Camera"><Camera size={20} /></button><button className="composer-tool" disabled title="Voice input is not configured" aria-label="Voice message"><Mic size={20} /></button><textarea value={draft} onChange={e => setDraft(e.target.value)} maxLength={12000} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`Message ${role?.name || 'Hermes'}`} rows={1} /><button className="send-button" onClick={send} disabled={!draft.trim() || busy} aria-label="Send">{busy ? <RefreshCw className="spin" size={16} /> : <Send size={17} />}</button></div><p>{gateway.status === 'online' ? 'Creates a verified Hermes run' : 'Saved locally until Hermes is connected'}</p></div>
     </section>
     <aside className="thread-inspector"><header><h2>Agent controls</h2><button className="icon-button" onClick={settings} aria-label="Settings"><Settings size={18} /></button></header><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h3>{role?.name}</h3><p>{role?.role}</p><dl><div><dt>Session</dt><dd className="mono">jarvis-{activeRole}</dd></div><div><dt>Transport</dt><dd>{gateway.status === 'online' ? 'Hermes Runs API' : 'Local only'}</dd></div><div><dt>Authority</dt><dd>Operator directed</dd></div><div><dt>Status</dt><dd>{statusText(gateway)}</dd></div></dl><button className="inspector-skills" onClick={() => setSkills(true)}>View controls and skills</button><div className="context-note"><ShieldCheck size={17} /><p>Agent capability is limited by the connected Hermes profile and your approval policy.</p></div></aside>
