@@ -36,12 +36,12 @@ The global assistant is a federated view. It may retrieve from every profile, bu
 
 | Capability | Hermes Agent baseline | OpenClaw contribution | OrbityLabs status |
 | --- | --- | --- | --- |
-| Profile-isolated contexts | Context files, personalities, memory | Workspace/agent routing | UI foundation implemented; durable runtime storage pending |
-| Global cross-profile assistant | Session search and user model | Multi-agent/team routing | Browser-local federated context implemented; server retrieval pending |
+| Profile-isolated contexts | Context files, personalities, memory | Workspace/agent routing | Profiles, agents, tasks, knowledge sources, autonomy policy, and model routes are stored server-side in SQLite (`backend/hermes_jarvis/store.py`) with every query scoped by `profile_id`; conversations/messages remain browser-local pending a durable sessions store |
+| Global cross-profile assistant | Session search and user model | Multi-agent/team routing | `GET /api/global/context` federates across profiles server-side with explicit per-item profile provenance; implemented |
 | Streaming agent loop | Streaming TUI and run lifecycle | Gateway RPC and chat clients | Existing run/event bridge partial; native loop pending |
-| Model/provider routing | Nous, OpenRouter, OpenAI-compatible and others | Model registry and provider auth | Per-agent provider/model overrides are sent with each verified Hermes `/v1/runs` request; native provider registry and credential lifecycle remain pending |
+| Model/provider routing | Nous, OpenRouter, OpenAI-compatible and others | Model registry and provider auth | Per-agent, per-profile provider/model routes persist server-side and are sent with each verified Hermes `/v1/runs` request; the `orbitylabs` CLI, the desktop bridge, and the connect script now share one config path (previously three disconnected stores) and the bridge exposes it read-only via `GET /api/config`; native provider registry and credential lifecycle remain pending |
 | Tool system | 40+ tools and toolsets | Tools, plugins, ClawHub | Pending |
-| Automatic skill creation | Learning loop and Agent Skills standard | Skills/plugins ecosystem | Pending evaluation and approval pipeline |
+| Automatic skill creation | Learning loop and Agent Skills standard | Skills/plugins ecosystem | Profile-scoped GitHub skill-source registry is implemented in SQLite. Steel Browser and AgenticMail are attached as required source references for every agent; the skill engineer returns a runtime-generated specification. Code download, credential setup, execution, scanning, evaluation, and installation remain pending and are never claimed as complete by the UI. |
 | Skill self-improvement | Skill updates from experience | Plugin lifecycle | Pending versioned skill registry and regression checks |
 | Persistent memory | Agent-curated memory, nudges, FTS5, Honcho | Workspace memory and sessions | Pending database-backed service |
 | Subagents | Isolated delegates and parallel work | Agent routing and teams | Pending supervisor and budget controls |
@@ -54,7 +54,7 @@ The global assistant is a federated view. It may retrieve from every profile, bu
 | Browser/device control | Optional tool gateway/browser backend | Browser control and device nodes | Pending explicit provider connections |
 | Conversation controls | New/reset, model, personality, retry, undo, compress, usage | Slash commands and clients | Pending |
 | Research trajectories | Batch generation and compression | Extensible tools/plugins | Pending |
-| Diagnostics and updates | Setup, doctor, update | Doctor, update channels, appcast | Desktop release check exists; native doctor pending |
+| Diagnostics and updates | Setup, doctor, update | Doctor, update channels, appcast | `orbitylabs doctor` reports verified config-file/Node/autonomy/model state, whether a gateway URL/key are present (never printing the key), and whether the local bridge is actually reachable; desktop release check exists; `setup`/`update`/`gateway`/`tools` CLI commands still pending |
 
 ## Security requirements
 

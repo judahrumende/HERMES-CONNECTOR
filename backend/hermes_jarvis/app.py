@@ -12,12 +12,13 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .hermes import HermesError
 from .service import HermesService, Hub
@@ -126,6 +127,27 @@ class AgentInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     role: str = Field(default="", max_length=400)
     initials: str = Field(default="", max_length=8)
+
+
+class SkillInput(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    repository: str = Field(min_length=15, max_length=2048)
+    description: str = Field(default="", max_length=2000)
+
+    @field_validator("repository")
+    @classmethod
+    def repository_must_be_a_github_url(cls, value: str) -> str:
+        """Reject anything that is not a real https://github.com/<owner>/<repo> URL.
+
+        This field is rendered as a raw <a href> in the browser, so a non-http(s)
+        scheme (e.g. javascript:) would otherwise reach the DOM unvalidated.
+        """
+        parsed = urlparse(value.strip())
+        if parsed.scheme != "https" or parsed.netloc.lower() not in {"github.com", "www.github.com"}:
+            raise ValueError("Repository must be an https://github.com/<owner>/<repo> URL")
+        if len([segment for segment in parsed.path.split("/") if segment]) < 2:
+            raise ValueError("Repository must include an owner and a repository name")
+        return value.strip()
 
 
 class TaskInput(BaseModel):
@@ -279,6 +301,30 @@ async def list_agents(profile_id: str) -> list[dict[str, Any]]:
 async def create_agent(profile_id: str, value: AgentInput) -> dict[str, Any]:
     try:
         return app.state.store.create_agent(profile_id, str(uuid.uuid4()), value.name, value.role, value.initials)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/skills")
+async def list_skills(profile_id: str) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_skills(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/skills")
+async def create_skill(profile_id: str, value: SkillInput) -> dict[str, Any]:
+    try:
+        return app.state.store.create_skill(profile_id, str(uuid.uuid4()), value.name, value.repository, value.description)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/agent-skills")
+async def list_agent_skills(profile_id: str) -> dict[str, list[str]]:
+    try:
+        return app.state.store.list_agent_skills(profile_id)
     except ProfileNotFound as exc:
         raise HTTPException(404, "Profile not found") from exc
 

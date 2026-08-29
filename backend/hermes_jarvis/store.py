@@ -66,6 +66,27 @@ CREATE TABLE IF NOT EXISTS model_routes (
     PRIMARY KEY (profile_id, agent_id)
 );
 
+CREATE TABLE IF NOT EXISTS skill_sources (
+    id TEXT NOT NULL,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    repository TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, id),
+    UNIQUE (profile_id, repository)
+);
+
+CREATE TABLE IF NOT EXISTS agent_skill_sources (
+    profile_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    skill_id TEXT NOT NULL,
+    PRIMARY KEY (profile_id, agent_id, skill_id),
+    FOREIGN KEY (profile_id, agent_id) REFERENCES agents(profile_id, id) ON DELETE CASCADE,
+    FOREIGN KEY (profile_id, skill_id) REFERENCES skill_sources(profile_id, id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
@@ -108,6 +129,17 @@ class Store:
         if row is None:
             raise ProfileNotFound(profile_id)
 
+    def _ensure_default_skills(self, conn: sqlite3.Connection, profile_id: str) -> None:
+        defaults = (
+            ("steel-browser", "Steel Browser", "https://github.com/steel-dev/steel-browser", "Browser automation infrastructure for agent-run web work."),
+            ("agenticmail", "AgenticMail", "https://github.com/agenticmail/agenticmail", "Email, SMS, and phone-call infrastructure for agents."),
+        )
+        for skill_id, name, repository, description in defaults:
+            conn.execute(
+                "INSERT OR IGNORE INTO skill_sources (id, profile_id, name, repository, description, is_default, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+                (skill_id, profile_id, name, repository, description, now()),
+            )
+
     # -- profiles ---------------------------------------------------------
     def list_profiles(self) -> list[dict[str, Any]]:
         with self._connect() as conn:
@@ -122,6 +154,7 @@ class Store:
                 (id, name, kind, context, vault_path, created_at),
             )
             conn.execute("INSERT OR IGNORE INTO policy (profile_id, autonomy) VALUES (?, 'manual')", (id,))
+            self._ensure_default_skills(conn, id)
         return {"id": id, "name": name, "kind": kind, "context": context, "vault_path": vault_path, "created_at": created_at}
 
     def delete_profile(self, profile_id: str) -> None:
@@ -146,7 +179,49 @@ class Store:
                 "INSERT INTO agents (id, profile_id, name, role, initials, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 (id, profile_id, name, role, initials, created_at),
             )
+            self._ensure_default_skills(conn, profile_id)
+            conn.execute(
+                "INSERT OR IGNORE INTO agent_skill_sources (profile_id, agent_id, skill_id) SELECT ?, ?, id FROM skill_sources WHERE profile_id = ? AND is_default = 1",
+                (profile_id, id, profile_id),
+            )
         return {"id": id, "profile_id": profile_id, "name": name, "role": role, "initials": initials, "created_at": created_at}
+
+    # -- profile skills ------------------------------------------------------
+    def list_skills(self, profile_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            self._ensure_default_skills(conn, profile_id)
+            rows = conn.execute(
+                "SELECT id, name, repository, description, is_default, created_at FROM skill_sources WHERE profile_id = ? ORDER BY is_default DESC, created_at",
+                (profile_id,),
+            ).fetchall()
+            return [{**dict(row), "default": bool(row["is_default"]), "status": "source"} for row in rows]
+
+    def create_skill(self, profile_id: str, id: str, name: str, repository: str, description: str) -> dict[str, Any]:
+        created_at = now()
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "INSERT INTO skill_sources (id, profile_id, name, repository, description, is_default, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+                (id, profile_id, name, repository, description, created_at),
+            )
+        return {"id": id, "name": name, "repository": repository, "description": description, "default": False, "status": "source", "created_at": created_at}
+
+    def list_agent_skills(self, profile_id: str) -> dict[str, list[str]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            self._ensure_default_skills(conn, profile_id)
+            conn.execute(
+                "INSERT OR IGNORE INTO agent_skill_sources (profile_id, agent_id, skill_id) SELECT a.profile_id, a.id, s.id FROM agents a JOIN skill_sources s ON s.profile_id = a.profile_id AND s.is_default = 1 WHERE a.profile_id = ?",
+                (profile_id,),
+            )
+            rows = conn.execute(
+                "SELECT agent_id, skill_id FROM agent_skill_sources WHERE profile_id = ?", (profile_id,)
+            ).fetchall()
+            result: dict[str, list[str]] = {}
+            for row in rows:
+                result.setdefault(row["agent_id"], []).append(row["skill_id"])
+            return result
 
     # -- tasks ----------------------------------------------------------------
     def list_tasks(self, profile_id: str) -> list[dict[str, Any]]:
