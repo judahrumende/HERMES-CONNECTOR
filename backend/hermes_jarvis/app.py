@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import secrets
@@ -33,12 +34,35 @@ def config_file() -> Path:
     if override:
         return Path(override)
     if os.name == "nt":
+        return Path(os.getenv("APPDATA", Path.home())) / "OrbityLabs" / ".env"
+    if sys_platform := os.getenv("XDG_CONFIG_HOME"):
+        return Path(sys_platform) / "OrbityLabs" / ".env"
+    if Path("/Applications").exists():
+        return Path.home() / "Library" / "Application Support" / "OrbityLabs" / ".env"
+    return Path.home() / ".config" / "OrbityLabs" / ".env"
+
+
+def legacy_config_file() -> Path:
+    """The pre-rebrand config path. Read-only fallback so installs from before the OrbityLabs rename keep working."""
+    if os.getenv("HERMES_JARVIS_CONFIG_FILE"):
+        return config_file()
+    if os.name == "nt":
         return Path(os.getenv("APPDATA", Path.home())) / "Hermes Jarvis" / ".env"
     if sys_platform := os.getenv("XDG_CONFIG_HOME"):
         return Path(sys_platform) / "Hermes Jarvis" / ".env"
     if Path("/Applications").exists():
         return Path.home() / "Library" / "Application Support" / "Hermes Jarvis" / ".env"
     return Path.home() / ".config" / "Hermes Jarvis" / ".env"
+
+
+def cli_config_file() -> Path:
+    """The OrbityLabs CLI's autonomy/model-route config.json, shared read-only with the bridge."""
+    override = os.getenv("ORBITYLABS_CONFIG_FILE")
+    if override:
+        return Path(override)
+    if os.name == "nt":
+        return Path(os.getenv("APPDATA", Path.home())) / "OrbityLabs" / "config.json"
+    return Path.home() / "Library" / "Application Support" / "OrbityLabs" / "config.json"
 
 
 def load_environment(path: Path) -> None:
@@ -57,7 +81,25 @@ def load_environment(path: Path) -> None:
 
 
 load_environment(config_file())
+load_environment(legacy_config_file())
 load_environment(ROOT / ".env")
+
+
+def read_cli_config() -> dict[str, Any]:
+    """Read the OrbityLabs CLI's non-secret runtime config (autonomy, default model, per-agent routes)."""
+    default: dict[str, Any] = {"autonomy": "manual", "models": [], "default_model": "", "agents": {}}
+    try:
+        raw = json.loads(cli_config_file().read_text())
+    except (OSError, ValueError):
+        return default
+    if not isinstance(raw, dict):
+        return default
+    return {
+        "autonomy": raw.get("autonomy") if raw.get("autonomy") in ("manual", "auto-safe") else "manual",
+        "models": raw.get("models") if isinstance(raw.get("models"), list) else [],
+        "default_model": raw.get("default_model") if isinstance(raw.get("default_model"), str) else "",
+        "agents": raw.get("agents") if isinstance(raw.get("agents"), dict) else {},
+    }
 
 
 class ConnectionInput(BaseModel):
@@ -163,6 +205,12 @@ app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http
 @app.get("/api/health")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/config")
+async def cli_config() -> dict[str, Any]:
+    """Non-secret runtime config set through the `orbitylabs` CLI (never includes HERMES_API_KEY)."""
+    return read_cli_config()
 
 
 @app.get("/api/hermes/status")

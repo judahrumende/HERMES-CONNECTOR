@@ -25,12 +25,12 @@ def default_config_file() -> Path:
     if override:
         return Path(override)
     if os.name == "nt":
-        return Path(os.getenv("APPDATA", Path.home())) / "Hermes Jarvis" / ".env"
+        return Path(os.getenv("APPDATA", Path.home())) / "OrbityLabs" / ".env"
     if os.getenv("XDG_CONFIG_HOME"):
-        return Path(os.environ["XDG_CONFIG_HOME"]) / "Hermes Jarvis" / ".env"
+        return Path(os.environ["XDG_CONFIG_HOME"]) / "OrbityLabs" / ".env"
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Hermes Jarvis" / ".env"
-    return Path.home() / ".config" / "Hermes Jarvis" / ".env"
+        return Path.home() / "Library" / "Application Support" / "OrbityLabs" / ".env"
+    return Path.home() / ".config" / "OrbityLabs" / ".env"
 
 
 def valid_url(value: str) -> str:

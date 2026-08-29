@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const net = require('node:net');
 const path = require('node:path');
+const fs = require('node:fs');
 
 let serverProcess;
 let mainWindow;
@@ -58,7 +59,9 @@ async function waitForServer(url) {
 function startServer(port) {
   const bindHost = process.env.HERMES_JARVIS_BIND_HOST || '0.0.0.0';
   const packagedBinary = path.join(process.resourcesPath, 'server', 'hermes-jarvis-server');
-  const configFile = path.join(app.getPath('appData'), 'Hermes Jarvis', '.env');
+  const legacyConfigFile = path.join(app.getPath('appData'), 'Hermes Jarvis', '.env');
+  const orbitylabsConfigFile = path.join(app.getPath('appData'), 'OrbityLabs', '.env');
+  const configFile = !fs.existsSync(orbitylabsConfigFile) && fs.existsSync(legacyConfigFile) ? legacyConfigFile : orbitylabsConfigFile;
   const env = {
     ...process.env,
     HERMES_JARVIS_CONFIG_FILE: configFile,
