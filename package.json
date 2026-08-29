@@ -5,7 +5,8 @@
   "type": "module",
   "main": "desktop/main.cjs",
   "bin": {
-    "orbitylabs-connect": "bin/orbitylabs-connect.mjs"
+    "orbitylabs-connect": "bin/orbitylabs-connect.mjs",
+    "orbitylabs": "bin/orbitylabs.mjs"
   },
   "scripts": {
     "dev": "vite",

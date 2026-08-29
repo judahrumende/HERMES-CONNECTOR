@@ -44,6 +44,18 @@ Open `http://127.0.0.1:8787`. The FastAPI process serves the built frontend and 
 
 The desktop app is a native macOS window around the exact same production frontend and local Hermes Jarvis server. It does not send your Hermes API key to the renderer.
 
+## Autonomy and model configuration
+
+OrbityLabs supports a profile-scoped `auto-safe` policy for routine, reversible work. It does not bypass confirmation for external messages, account or credential creation, payments, deletion, publishing, or security changes. The configuration CLI writes to the private OrbityLabs application-support directory:
+
+```bash
+npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs config set autonomy auto-safe
+npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs models add ollama/llama3.2
+npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs config list
+```
+
+The model command records a route for the local runtime configuration; it does not download a model or claim that a provider is available. The provider must be installed and configured separately.
+
 Build a downloadable `.dmg` installer with one command:
 
 ```bash
