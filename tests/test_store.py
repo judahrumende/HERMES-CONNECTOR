@@ -102,3 +102,30 @@ def test_global_context_carries_profile_provenance(store: Store) -> None:
     assert context[0]["name"] == "Business"
     assert context[0]["agents"] == [{"name": "CEO", "role": "Strategy"}]
     assert context[0]["sources"] == ["Playbook"]
+
+
+def test_agent_output_and_continuous_loop_are_profile_scoped(store: Store) -> None:
+    store.create_profile("a", "A", "", "", "/tmp/vault-a")
+    store.create_profile("b", "B", "", "", "/tmp/vault-b")
+    store.create_agent("a", "ceo", "CEO", "Operations", "CE", "/tmp/agent-a", True, True, 120)
+
+    candidates = store.agent_loop_candidates()
+    assert len(candidates) == 1
+    assert candidates[0]["profile_id"] == "a"
+    assert candidates[0]["output_path"] == "/tmp/agent-a"
+    assert candidates[0]["mirror_to_vault"] == 1
+    assert candidates[0]["interval_seconds"] == 120
+
+    store.mark_agent_loop("a", "ceo", run_id="run-1")
+    assert store.agent_loop_candidates()[0]["last_run_id"] == "run-1"
+
+
+def test_paired_device_secret_is_hashed_and_manifest_has_no_secret(store: Store) -> None:
+    store.create_profile("a", "A", "", "Private context", "/tmp/vault-a")
+    store.create_agent("a", "ceo", "CEO", "Operations", "CE")
+    store.register_paired_device("device-1", "hashed-secret", "Phone")
+
+    assert store.verify_paired_device("hashed-secret") is True
+    assert store.verify_paired_device("wrong-secret") is False
+    manifest = store.mobile_manifest()
+    assert manifest == [{"id": "a", "name": "A", "kind": "", "context": "Private context", "agents": [{"id": "ceo", "name": "CEO", "role": "Operations", "initials": "CE"}]}]

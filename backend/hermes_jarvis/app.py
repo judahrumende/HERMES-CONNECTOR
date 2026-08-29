@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import os
 import re
@@ -16,13 +17,14 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from .hermes import HermesError
+from .loops import AgentLoopScheduler
 from .service import HermesService, Hub
 from .store import ProfileNotFound, Store
 
@@ -129,6 +131,32 @@ class AgentInput(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     role: str = Field(default="", max_length=400)
     initials: str = Field(default="", max_length=8)
+    output_path: str = Field(default="", max_length=2048)
+    mirror_to_vault: bool = True
+    loop_enabled: bool = True
+    loop_interval_seconds: int = Field(default=300, ge=60, le=86400)
+
+
+class ArtifactInput(BaseModel):
+    relative_path: str = Field(min_length=1, max_length=1024)
+    content: str = Field(max_length=2_000_000)
+
+    @field_validator("relative_path")
+    @classmethod
+    def artifact_path_must_be_relative(cls, value: str) -> str:
+        candidate = Path(value)
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise ValueError("Artifact path must be a safe relative path")
+        return value
+
+
+class CEOMessage(BaseModel):
+    message: str = Field(min_length=1, max_length=30_000)
+
+
+class ManualPairingCompletion(BaseModel):
+    code: str = Field(min_length=8, max_length=32)
+    device_name: str = Field(default="Phone", min_length=1, max_length=80)
 
 
 class SkillInput(BaseModel):
@@ -292,6 +320,40 @@ def verify_composio_key() -> dict[str, Any]:
         return {**composio_snapshot(), "detail": "Could not reach Composio to verify this key. Check your internet connection and try again."}
 
 
+def configured_agent_folder(profile_id: str, agent_id: str) -> tuple[dict[str, Any], Path]:
+    """Resolve an existing operator-configured output directory for one agent."""
+    try:
+        agent = next(item for item in app.state.store.list_agents(profile_id) if item["id"] == agent_id)
+    except StopIteration as exc:
+        raise HTTPException(404, "Agent not found") from exc
+    configured = str(agent.get("output_path") or "").strip()
+    if not configured:
+        raise HTTPException(422, "Choose an existing output folder for this agent before it can write files")
+    try:
+        output = Path(configured).expanduser().resolve(strict=True)
+    except OSError as exc:
+        raise HTTPException(422, "The configured agent output folder cannot be found") from exc
+    if not output.is_dir():
+        raise HTTPException(422, "The configured agent output path is not a folder")
+    return agent, output
+
+
+def find_ceo(profile_id: str) -> dict[str, Any]:
+    agents = app.state.store.list_agents(profile_id)
+    ceos = [agent for agent in agents if "ceo" in f"{agent['name']} {agent['role']}".lower()]
+    if not ceos:
+        raise HTTPException(422, "Create a CEO agent for this profile before sending it a message")
+    return ceos[0]
+
+
+def paired_device_or_403(secret: str | None) -> None:
+    if not secret:
+        raise HTTPException(401, "This request must come from a paired mobile device")
+    digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
+    if not app.state.store.verify_paired_device(digest):
+        raise HTTPException(401, "Mobile device is not paired or its access key has been revoked")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     hub = Hub()
@@ -301,11 +363,14 @@ async def lifespan(app: FastAPI):
     app.state.store = Store(STATE_DIR / "orbitylabs.db")
     app.state.pairings: dict[str, dict[str, Any]] = {}
     watcher = asyncio.create_task(service.watch())
+    scheduler = AgentLoopScheduler(app.state.store, service, hub)
+    loop_watcher = asyncio.create_task(scheduler.watch())
     try:
         yield
     finally:
         watcher.cancel()
-        await asyncio.gather(watcher, return_exceptions=True)
+        loop_watcher.cancel()
+        await asyncio.gather(watcher, loop_watcher, return_exceptions=True)
 
 
 app = FastAPI(title="Hermes Jarvis", version="1.0.0", lifespan=lifespan)
@@ -422,9 +487,51 @@ async def list_agents(profile_id: str) -> list[dict[str, Any]]:
 @app.post("/api/profiles/{profile_id}/agents")
 async def create_agent(profile_id: str, value: AgentInput) -> dict[str, Any]:
     try:
-        return app.state.store.create_agent(profile_id, str(uuid.uuid4()), value.name, value.role, value.initials)
+        return app.state.store.create_agent(profile_id, str(uuid.uuid4()), value.name, value.role, value.initials, value.output_path, value.mirror_to_vault, value.loop_enabled, value.loop_interval_seconds)
     except ProfileNotFound as exc:
         raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/agents/{agent_id}/artifacts")
+async def write_agent_artifact(profile_id: str, agent_id: str, value: ArtifactInput) -> dict[str, Any]:
+    """Write a real artifact to the selected agent folder and optional profile vault mirror."""
+    agent, output = configured_agent_folder(profile_id, agent_id)
+    target = (output / value.relative_path).resolve()
+    if output != target and output not in target.parents:
+        raise HTTPException(422, "Artifact path escapes the configured agent output folder")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(value.content, encoding="utf-8")
+    mirrored_to = ""
+    if agent.get("mirror_to_vault"):
+        _, vault, _ = profile_vault(profile_id)
+        if vault:
+            mirror_root = (vault / "OrbityLabs" / "agents" / agent_id).resolve()
+            if vault != mirror_root and vault not in mirror_root.parents:
+                raise HTTPException(422, "Invalid vault mirror location")
+            mirror_target = (mirror_root / value.relative_path).resolve()
+            if mirror_root != mirror_target and mirror_root not in mirror_target.parents:
+                raise HTTPException(422, "Artifact path escapes the vault mirror")
+            mirror_target.parent.mkdir(parents=True, exist_ok=True)
+            mirror_target.write_text(value.content, encoding="utf-8")
+            mirrored_to = str(mirror_target)
+    app.state.store.record_event(profile_id, "agent.artifact_written", {"agent_id": agent_id, "path": str(target), "mirrored_to": mirrored_to or None})
+    return {"path": str(target), "mirrored_to": mirrored_to or None}
+
+
+@app.post("/api/profiles/{profile_id}/ceo/messages")
+async def message_ceo(profile_id: str, value: CEOMessage) -> dict[str, Any]:
+    """The single laptop-side conversational entry point for a profile's CEO."""
+    ceo = find_ceo(profile_id)
+    try:
+        result = await app.state.hermes.run({
+            "input": value.message,
+            "session_id": f"orbitylabs:{profile_id}:{ceo['id']}:ceo",
+            "metadata": {"profile_id": profile_id, "agent_id": ceo["id"], "role": "ceo", "entrypoint": "operator_chat"},
+        })
+    except HermesError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    app.state.store.record_event(profile_id, "ceo.message_sent", {"agent_id": ceo["id"], "run_id": result.get("run_id") or result.get("id")})
+    return result
 
 
 @app.get("/api/profiles/{profile_id}/skills")
@@ -557,9 +664,11 @@ async def start_pairing() -> dict[str, Any]:
     now = time.time()
     app.state.pairings = {key: value for key, value in app.state.pairings.items() if value["expires_at"] > now and not value.get("paired")}
     pairing_id, token = secrets.token_urlsafe(12), secrets.token_urlsafe(24)
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    manual_code = "".join(secrets.choice(alphabet) for _ in range(8))
     expires_at = now + 300
-    app.state.pairings[pairing_id] = {"token": token, "expires_at": expires_at, "paired": False}
-    return {"pairing_id": pairing_id, "token": token, "expires_at": expires_at, "lan_host": local_address()}
+    app.state.pairings[pairing_id] = {"token": token, "manual_code": manual_code, "expires_at": expires_at, "paired": False}
+    return {"pairing_id": pairing_id, "token": token, "manual_code": manual_code, "expires_at": expires_at, "lan_host": local_address()}
 
 
 @app.get("/api/pairing/{pairing_id}")
@@ -575,8 +684,36 @@ async def complete_pairing(pairing_id: str, value: PairingCompletion) -> dict[st
     item = app.state.pairings.get(pairing_id)
     if not item or item["expires_at"] <= time.time() or not secrets.compare_digest(item["token"], value.token):
         raise HTTPException(403, "Pairing invitation is invalid or expired")
-    item.update({"paired": True, "device_name": value.device_name, "device_secret": secrets.token_urlsafe(32)})
-    return {"pairing_id": pairing_id, "device_secret": item["device_secret"], "paired_with": "Laptop command centre"}
+    return finish_pairing(pairing_id, item, value.device_name)
+
+
+def finish_pairing(pairing_id: str, item: dict[str, Any], device_name: str) -> dict[str, Any]:
+    device_secret = secrets.token_urlsafe(32)
+    device_id = str(uuid.uuid4())
+    app.state.store.register_paired_device(device_id, hashlib.sha256(device_secret.encode("utf-8")).hexdigest(), device_name)
+    item.update({"paired": True, "device_name": device_name, "device_secret": device_secret, "device_id": device_id})
+    return {"pairing_id": pairing_id, "device_id": device_id, "device_secret": device_secret, "paired_with": "Laptop command centre"}
+
+
+@app.post("/api/pairing/manual/complete")
+async def complete_manual_pairing(value: ManualPairingCompletion) -> dict[str, Any]:
+    candidate = value.code.strip().upper()
+    for pairing_id, item in app.state.pairings.items():
+        if item["expires_at"] > time.time() and not item.get("paired") and secrets.compare_digest(item.get("manual_code", ""), candidate):
+            return finish_pairing(pairing_id, item, value.device_name)
+    raise HTTPException(403, "Pairing code is invalid or expired")
+
+
+@app.get("/api/mobile/manifest")
+async def mobile_manifest(x_orbity_device_secret: str | None = Header(default=None)) -> dict[str, Any]:
+    paired_device_or_403(x_orbity_device_secret)
+    return {"profiles": app.state.store.mobile_manifest(), "host": "Laptop command centre"}
+
+
+@app.post("/api/mobile/ceo/messages")
+async def mobile_message_ceo(value: CEOMessage, profile_id: str, x_orbity_device_secret: str | None = Header(default=None)) -> dict[str, Any]:
+    paired_device_or_403(x_orbity_device_secret)
+    return await message_ceo(profile_id, value)
 
 
 @app.websocket("/ws/live")

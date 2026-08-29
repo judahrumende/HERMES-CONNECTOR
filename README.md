@@ -52,6 +52,14 @@ The **Connectors** tab verifies an optional server-only `COMPOSIO_API_KEY` again
 
 Desktop capabilities are intentionally limited to an operator-configured profile vault. Agents do not receive unrestricted access to every local file, application, or macOS permission by default.
 
+## Continuous CEO and paired mobile remote
+
+Each agent can be configured with an existing output folder and an optional mirror into its profile's Obsidian vault at `OrbityLabs/agents/<agent-id>/`. The local server exposes a controlled artifact endpoint for those configured paths; it does not silently write across the rest of the disk.
+
+Enabled agent loops are scheduled by the desktop bridge while it is running. A CEO loop sends an explicit operating prompt to the verified Hermes runtime, records the started run, and reports a clear skipped/failed status if Hermes is offline. This is not a cloud worker: closing the desktop bridge stops the loops.
+
+The paired mobile companion is a remote CEO chat client. Pair it from the laptop’s QR code or eight-character fallback code; it receives the profile/agent manifest without provider keys, vault paths, or desktop controls. Its source lives in [Hermes-connector-mobile](https://github.com/judahrumende/Hermes-connector-mobile).
+
 ## Autonomy and model configuration
 
 OrbityLabs supports a profile-scoped `auto-safe` policy for routine, reversible work. It does not bypass confirmation for external messages, account or credential creation, payments, deletion, publishing, or security changes. The configuration CLI writes to the private OrbityLabs application-support directory:

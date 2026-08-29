@@ -30,8 +30,30 @@ CREATE TABLE IF NOT EXISTS agents (
     name TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT '',
     initials TEXT NOT NULL DEFAULT '',
+    output_path TEXT NOT NULL DEFAULT '',
+    mirror_to_vault INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL,
     PRIMARY KEY (profile_id, id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_loops (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    interval_seconds INTEGER NOT NULL DEFAULT 300,
+    last_started_at TEXT,
+    last_run_id TEXT,
+    last_error TEXT,
+    PRIMARY KEY (profile_id, agent_id),
+    FOREIGN KEY (profile_id, agent_id) REFERENCES agents(profile_id, id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS paired_devices (
+    id TEXT PRIMARY KEY,
+    secret_hash TEXT NOT NULL UNIQUE,
+    device_name TEXT NOT NULL,
+    paired_at TEXT NOT NULL,
+    last_seen_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -112,6 +134,15 @@ class Store:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as conn:
             conn.executescript(SCHEMA)
+            self._migrate(conn)
+
+    def _migrate(self, conn: sqlite3.Connection) -> None:
+        """Apply additive migrations for existing local installations."""
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(agents)").fetchall()}
+        if "output_path" not in columns:
+            conn.execute("ALTER TABLE agents ADD COLUMN output_path TEXT NOT NULL DEFAULT ''")
+        if "mirror_to_vault" not in columns:
+            conn.execute("ALTER TABLE agents ADD COLUMN mirror_to_vault INTEGER NOT NULL DEFAULT 1")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -179,20 +210,66 @@ class Store:
             ).fetchall()
             return [dict(row) for row in rows]
 
-    def create_agent(self, profile_id: str, id: str, name: str, role: str, initials: str) -> dict[str, Any]:
+    def create_agent(self, profile_id: str, id: str, name: str, role: str, initials: str, output_path: str = "", mirror_to_vault: bool = True, loop_enabled: bool = True, loop_interval_seconds: int = 300) -> dict[str, Any]:
         created_at = now()
         with self._connect() as conn:
             self._require_profile(conn, profile_id)
             conn.execute(
-                "INSERT INTO agents (id, profile_id, name, role, initials, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                (id, profile_id, name, role, initials, created_at),
+                "INSERT INTO agents (id, profile_id, name, role, initials, output_path, mirror_to_vault, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (id, profile_id, name, role, initials, output_path, int(mirror_to_vault), created_at),
             )
             self._ensure_default_skills(conn, profile_id)
             conn.execute(
                 "INSERT OR IGNORE INTO agent_skill_sources (profile_id, agent_id, skill_id) SELECT ?, ?, id FROM skill_sources WHERE profile_id = ? AND is_default = 1",
                 (profile_id, id, profile_id),
             )
-        return {"id": id, "profile_id": profile_id, "name": name, "role": role, "initials": initials, "created_at": created_at}
+            conn.execute(
+                "INSERT INTO agent_loops (profile_id, agent_id, enabled, interval_seconds) VALUES (?, ?, ?, ?)",
+                (profile_id, id, int(loop_enabled), loop_interval_seconds),
+            )
+        return {"id": id, "profile_id": profile_id, "name": name, "role": role, "initials": initials, "output_path": output_path, "mirror_to_vault": mirror_to_vault, "created_at": created_at}
+
+    def agent_loop_candidates(self) -> list[dict[str, Any]]:
+        """Return enabled loops. The scheduler, not this storage method, owns timing."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT l.*, a.name, a.role, a.output_path, a.mirror_to_vault, p.name AS profile_name, p.context, p.vault_path "
+                "FROM agent_loops l JOIN agents a ON a.profile_id = l.profile_id AND a.id = l.agent_id "
+                "JOIN profiles p ON p.id = l.profile_id WHERE l.enabled = 1"
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def mark_agent_loop(self, profile_id: str, agent_id: str, *, run_id: str = "", error: str = "") -> None:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "UPDATE agent_loops SET last_started_at = ?, last_run_id = ?, last_error = ? WHERE profile_id = ? AND agent_id = ?",
+                (now(), run_id or None, error or None, profile_id, agent_id),
+            )
+
+    def mobile_manifest(self) -> list[dict[str, Any]]:
+        """Return the non-secret host state sent to a paired mobile remote."""
+        with self._connect() as conn:
+            profiles = [dict(row) for row in conn.execute("SELECT id, name, kind, context FROM profiles ORDER BY created_at").fetchall()]
+            for profile in profiles:
+                agents = conn.execute("SELECT id, name, role, initials FROM agents WHERE profile_id = ? ORDER BY created_at", (profile["id"],)).fetchall()
+                profile["agents"] = [dict(agent) for agent in agents]
+            return profiles
+
+    def register_paired_device(self, device_id: str, secret_hash: str, device_name: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO paired_devices (id, secret_hash, device_name, paired_at, last_seen_at) VALUES (?, ?, ?, ?, ?)",
+                (device_id, secret_hash, device_name, now(), now()),
+            )
+
+    def verify_paired_device(self, secret_hash: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT id FROM paired_devices WHERE secret_hash = ?", (secret_hash,)).fetchone()
+            if row is None:
+                return False
+            conn.execute("UPDATE paired_devices SET last_seen_at = ? WHERE id = ?", (now(), row["id"]))
+            return True
 
     # -- profile skills ------------------------------------------------------
     def list_skills(self, profile_id: str) -> list[dict[str, Any]]:
