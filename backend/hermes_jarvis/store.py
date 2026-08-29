@@ -146,6 +146,14 @@ class Store:
             rows = conn.execute("SELECT * FROM profiles ORDER BY created_at").fetchall()
             return [dict(row) for row in rows]
 
+    def get_profile(self, profile_id: str) -> dict[str, Any]:
+        """Return exactly one profile for profile-scoped local integrations."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+            if row is None:
+                raise ProfileNotFound(profile_id)
+            return dict(row)
+
     def create_profile(self, id: str, name: str, kind: str, context: str, vault_path: str) -> dict[str, Any]:
         created_at = now()
         with self._connect() as conn:

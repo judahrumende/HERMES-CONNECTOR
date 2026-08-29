@@ -4,12 +4,13 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 import type { Session } from '@supabase/supabase-js';
 import { supabase, supabaseAuthConfigured } from './lib/supabase';
 import { AgentProviderManager } from './agent-provider-manager';
+import { ConnectorsPage, GraphifyPage } from './graphify-page';
 import { SkillsPage } from './skills-page';
 import {
   Activity, AlertCircle, ArrowRight, Bell, Bot, Check, ChevronLeft, ChevronRight,
   Camera, Circle, CornerDownLeft, Database, Image as ImageIcon, Inbox, LayoutDashboard, ListFilter,
   ListChecks, Menu, MessageSquare, Mic, Minimize2, Network, Paperclip, Pencil, Plus, RefreshCw, Search, Send,
-  Settings, ShieldCheck, Sparkles, UserPlus, Users, X, Zap, Copy as CopyIcon, ScanLine, Smartphone, Laptop, Layers,
+  Settings, ShieldCheck, Sparkles, UserPlus, Users, X, Zap, Copy as CopyIcon, ScanLine, Smartphone, Laptop, Layers, GitBranch, Plug,
 } from 'lucide-react';
 import './convos-app.css';
 import './branding.css';
@@ -17,7 +18,7 @@ import './profile.css';
 import { fetchGlobalContext, useProfileAgents, useProfileModelRoutes, useProfilePolicy, useProfileSkills, useProfileSources, useProfileTasks, useProfiles } from './lib/profile-api';
 import type { AgentRuntime, ApprovalMode, Role, Source, Status, Task, WorkspaceProfile } from './lib/profile-api';
 
-type View = 'overview' | 'setup' | 'messages' | 'work' | 'agents' | 'skills' | 'knowledge' | 'approvals' | 'settings' | 'pairing' | 'profiles' | 'global';
+type View = 'overview' | 'setup' | 'messages' | 'work' | 'agents' | 'skills' | 'knowledge' | 'approvals' | 'settings' | 'pairing' | 'profiles' | 'global' | 'graphify' | 'connectors';
 type Kind = 'directive' | 'task' | 'role' | 'group' | 'source' | 'connection' | 'job' | null;
 type Gateway = { status: 'loading' | 'bridge_offline' | 'not_configured' | 'unknown' | 'offline' | 'online'; base_url?: string | null; checked_at?: string | null; models?: unknown; jobs?: unknown; error?: string | null };
 type Event = { type: string; at?: string; data?: Record<string, unknown> };
@@ -53,7 +54,7 @@ function extractResponseText(value: unknown, depth = 0): string | null {
 const nav: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'profiles', label: 'Profiles', icon: Layers }, { id: 'global', label: 'All profiles', icon: MessageSquare }, { id: 'setup', label: 'Steps to do', icon: ListChecks }, { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'work', label: 'Work', icon: Inbox }, { id: 'agents', label: 'Agents', icon: Bot },
-  { id: 'skills', label: 'Skills', icon: Sparkles }, { id: 'knowledge', label: 'Knowledge', icon: Database }, { id: 'approvals', label: 'Approvals', icon: ShieldCheck }, { id: 'pairing', label: 'Pairing', icon: ScanLine },
+  { id: 'skills', label: 'Skills', icon: Sparkles }, { id: 'knowledge', label: 'Knowledge', icon: Database }, { id: 'graphify', label: 'Graphify', icon: GitBranch }, { id: 'connectors', label: 'Connectors', icon: Plug }, { id: 'approvals', label: 'Approvals', icon: ShieldCheck }, { id: 'pairing', label: 'Pairing', icon: ScanLine },
 ];
 
 function useStored<T>(key: string, initial: T) {
@@ -184,6 +185,8 @@ function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobil
       {view === 'agents' && <AgentProviderManager roles={roles} gateway={hermes.status} runtimes={agentRuntimes} setRoute={setAgentRoute} add={() => setDialog('role')} />}
       {view === 'skills' && <SkillsPage profileId={profileKey} profileName={currentProfile?.name || 'this profile'} skills={skills} roles={roles} agentSkills={agentSkills} gateway={hermes.status} createSkill={createSkill} run={hermes.run} />}
       {view === 'knowledge' && <Knowledge sources={sources} add={() => setDialog('source')} />}
+      {view === 'graphify' && <GraphifyPage profileId={profileKey} profileName={currentProfile?.name || 'this profile'} />}
+      {view === 'connectors' && <ConnectorsPage />}
       {view === 'approvals' && <Approvals settings={goSettings} />}
       {view === 'pairing' && <PairingView />}
       {view === 'settings' && <><SettingsView gateway={hermes.status} refresh={hermes.refresh} configure={() => setDialog('connection')} job={() => setDialog('job')} /><AutonomyControl mode={approvalMode} setMode={setApprovalMode} /></>}

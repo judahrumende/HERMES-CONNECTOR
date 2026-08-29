@@ -44,6 +44,14 @@ Open `http://127.0.0.1:8787`. The FastAPI process serves the built frontend and 
 
 The desktop app is a native macOS window around the exact same production frontend and local Hermes Jarvis server. It does not send your Hermes API key to the renderer.
 
+## Profile integrations
+
+Each profile can hold the path to one Obsidian vault. The **Graphify** tab reads only that configured folder and displays Graphify's real `graphify-out/graph.html` when it exists. OrbityLabs does not scan the computer for vaults or invent a graph when one has not been generated. Install Graphify and generate output inside the profile vault using its official instructions: [Graphify](https://github.com/Graphify-Labs/graphify).
+
+The **Connectors** tab verifies an optional server-only `COMPOSIO_API_KEY` against Composio. Add it to the OrbityLabs desktop configuration file or `.env`, restart OrbityLabs, then choose **Verify Composio key**. Account connections remain explicit per profile through Composio Connect Link; the API key is never returned to the browser or included in agent prompts.
+
+Desktop capabilities are intentionally limited to an operator-configured profile vault. Agents do not receive unrestricted access to every local file, application, or macOS permission by default.
+
 ## Autonomy and model configuration
 
 OrbityLabs supports a profile-scoped `auto-safe` policy for routine, reversible work. It does not bypass confirmation for external messages, account or credential creation, payments, deletion, publishing, or security changes. The configuration CLI writes to the private OrbityLabs application-support directory:

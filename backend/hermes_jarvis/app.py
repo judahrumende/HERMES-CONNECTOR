@@ -12,7 +12,9 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -204,6 +206,92 @@ def local_address() -> str | None:
         return None
 
 
+def profile_vault(profile_id: str) -> tuple[dict[str, Any], Path | None, str | None]:
+    """Resolve only a vault explicitly assigned to this profile.
+
+    The bridge never falls back to the user's home directory or scans a disk for
+    vaults. This keeps profile context and desktop file access intentionally
+    scoped to an operator-chosen folder.
+    """
+    try:
+        profile = app.state.store.get_profile(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    configured = str(profile.get("vault_path") or "").strip()
+    if not configured:
+        return profile, None, "No Obsidian vault path is configured for this profile."
+    try:
+        vault = Path(configured).expanduser().resolve(strict=True)
+    except OSError:
+        return profile, None, "The configured Obsidian vault folder cannot be found."
+    if not vault.is_dir():
+        return profile, None, "The configured Obsidian vault path is not a folder."
+    return profile, vault, None
+
+
+def graphify_state(profile_id: str) -> tuple[dict[str, Any], Path | None, Path | None]:
+    profile, vault, issue = profile_vault(profile_id)
+    if vault is None:
+        return {
+            "profile_id": profile_id,
+            "profile_name": profile["name"],
+            "vault_configured": bool(str(profile.get("vault_path") or "").strip()),
+            "vault_available": False,
+            "vault_path": str(profile.get("vault_path") or ""),
+            "graph_available": False,
+            "graph_html_available": False,
+            "report_available": False,
+            "issue": issue,
+        }, None, None
+    output = (vault / "graphify-out").resolve()
+    if output != vault and vault not in output.parents:
+        raise HTTPException(400, "Invalid Graphify output location")
+    graph_html = output / "graph.html"
+    report = output / "GRAPH_REPORT.md"
+    graph_json = output / "graph.json"
+    graph_available = graph_html.is_file() or graph_json.is_file() or report.is_file()
+    return {
+        "profile_id": profile_id,
+        "profile_name": profile["name"],
+        "vault_configured": True,
+        "vault_available": True,
+        "vault_path": str(vault),
+        "graph_available": graph_available,
+        "graph_html_available": graph_html.is_file(),
+        "report_available": report.is_file(),
+        "issue": None if graph_available else "No Graphify output exists in this vault yet.",
+    }, graph_html if graph_html.is_file() else None, report if report.is_file() else None
+
+
+def composio_snapshot() -> dict[str, Any]:
+    return {
+        "configured": bool(os.getenv("COMPOSIO_API_KEY", "").strip()),
+        "verified": False,
+        "provider": "Composio",
+        "scope": "server-side only",
+        "detail": "Add COMPOSIO_API_KEY to the OrbityLabs desktop configuration, then verify it here.",
+    }
+
+
+def verify_composio_key() -> dict[str, Any]:
+    key = os.getenv("COMPOSIO_API_KEY", "").strip()
+    if not key:
+        return {**composio_snapshot(), "detail": "COMPOSIO_API_KEY is not configured in the desktop server environment."}
+    request = Request(
+        "https://backend.composio.dev/api/v3.1/tools?limit=1",
+        headers={"x-api-key": key, "Accept": "application/json"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            response.read(1)
+        return {**composio_snapshot(), "verified": True, "detail": "Composio API key verified. Account connections still require an explicit Connect Link flow per profile."}
+    except HTTPError as exc:
+        return {**composio_snapshot(), "detail": f"Composio rejected the configured API key (HTTP {exc.code})."}
+    except (URLError, OSError, TimeoutError):
+        return {**composio_snapshot(), "detail": "Could not reach Composio to verify this key. Check your internet connection and try again."}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     hub = Hub()
@@ -273,6 +361,40 @@ async def job(value: PayloadInput) -> dict[str, Any]:
 @app.get("/api/profiles")
 async def list_profiles() -> list[dict[str, Any]]:
     return app.state.store.list_profiles()
+
+
+@app.get("/api/connectors/composio")
+async def composio_status() -> dict[str, Any]:
+    """Report Composio configuration without sending its secret to the client."""
+    return composio_snapshot()
+
+
+@app.post("/api/connectors/composio/verify")
+async def composio_verify() -> dict[str, Any]:
+    """Validate the configured key with Composio's server API; key remains server-side."""
+    return await asyncio.to_thread(verify_composio_key)
+
+
+@app.get("/api/profiles/{profile_id}/graphify")
+async def profile_graphify(profile_id: str) -> dict[str, Any]:
+    state, _, _ = graphify_state(profile_id)
+    return state
+
+
+@app.get("/api/profiles/{profile_id}/graphify/view")
+async def profile_graphify_view(profile_id: str) -> FileResponse:
+    _, graph_html, _ = graphify_state(profile_id)
+    if graph_html is None:
+        raise HTTPException(404, "Graphify graph.html is not available for this profile")
+    return FileResponse(graph_html, media_type="text/html", headers={"Content-Security-Policy": "default-src 'self' data: blob: 'unsafe-inline'"})
+
+
+@app.get("/api/profiles/{profile_id}/graphify/report")
+async def profile_graphify_report(profile_id: str) -> FileResponse:
+    _, _, report = graphify_state(profile_id)
+    if report is None:
+        raise HTTPException(404, "Graphify GRAPH_REPORT.md is not available for this profile")
+    return FileResponse(report, media_type="text/markdown; charset=utf-8")
 
 
 @app.post("/api/profiles")
