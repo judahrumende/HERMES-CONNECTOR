@@ -14,6 +14,8 @@ The primary user is the operator who sets organisational direction, supervises a
 
 OrbityLabs is a human-facing command centre for an autonomous AI organisation. It lets an operator communicate with a persistent AI CEO and specialised agents, understand current work, review decisions and blockers, and oversee execution that continues independently of a browser session.
 
+OrbityLabs supports multiple isolated profiles. A profile may represent a business, software project, or another operating context, with its own instructions, Obsidian vault, agents, work, knowledge, memories, skills, and runtime policy. A global assistant can answer across profiles while preserving profile and source attribution.
+
 ## Positioning
 
 OrbityLabs organises durable Hermes profiles as an operating company rather than presenting one chatbot with temporary subagents. The organisation, agents, work, knowledge, and decisions are intended to persist across sessions and remain observable to the operator.
@@ -30,6 +32,8 @@ The product is used from a web interface alongside Hermes Agent and Hermes Gatew
 - Live Hermes operation, Obsidian, Graphify, and other providers remain unconfigured until real endpoints and credentials are supplied.
 - Unavailable integrations and telemetry must be shown as unavailable or unconfigured, never simulated as live.
 - Existing navigation, landing-to-command-centre transition, conversation selection, and local message composition must remain functional during visual redesigns.
+- Profile boundaries must prevent agents, messages, work, knowledge, vaults, memories, skills, and credentials from leaking between profiles.
+- OrbityLabs is transitioning toward a bundled native runtime informed by the MIT-licensed Hermes Agent and OpenClaw projects. Runtime parity must be tracked as implemented, partial, or unavailable; upstream capability lists are not evidence that OrbityLabs already supports them.
 
 ## Brand Commitments
 
