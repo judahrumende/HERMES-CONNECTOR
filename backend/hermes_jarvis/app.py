@@ -7,6 +7,7 @@ import secrets
 import socket
 import subprocess
 import time
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from .hermes import HermesError
 from .service import HermesService, Hub
+from .store import ProfileNotFound, Store
 
 ROOT = Path(os.getenv("HERMES_JARVIS_ROOT", Path(__file__).resolve().parents[2]))
 DIST = Path(os.getenv("HERMES_JARVIS_DIST_DIR", ROOT / "dist"))
@@ -71,6 +73,44 @@ class PairingCompletion(BaseModel):
     device_name: str = Field(default="Phone", min_length=1, max_length=80)
 
 
+class ProfileInput(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    kind: str = Field(default="", max_length=200)
+    context: str = Field(default="", max_length=8000)
+    vault_path: str = Field(default="", max_length=2048)
+
+
+class AgentInput(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    role: str = Field(default="", max_length=400)
+    initials: str = Field(default="", max_length=8)
+
+
+class TaskInput(BaseModel):
+    title: str = Field(min_length=1, max_length=400)
+    area: str = Field(default="General", max_length=200)
+    state: str = Field(default="draft", max_length=40)
+
+
+class TaskUpdate(BaseModel):
+    state: str = Field(min_length=1, max_length=40)
+
+
+class SourceInput(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    detail: str = Field(default="", max_length=2000)
+
+
+class PolicyInput(BaseModel):
+    autonomy: str = Field(pattern="^(manual|auto_safe)$")
+
+
+class ModelRouteInput(BaseModel):
+    agent_id: str = Field(default="", max_length=200)
+    provider: str = Field(default="", max_length=200)
+    model: str = Field(default="", max_length=200)
+
+
 def local_address() -> str | None:
     """Best-effort LAN address for a QR opened by a phone on the same Wi-Fi."""
     override = os.getenv("HERMES_JARVIS_LAN_HOST")
@@ -106,6 +146,7 @@ async def lifespan(app: FastAPI):
     service = HermesService(hub, STATE_DIR / "connection.json")
     service.load()
     app.state.hub, app.state.hermes = hub, service
+    app.state.store = Store(STATE_DIR / "orbitylabs.db")
     app.state.pairings: dict[str, dict[str, Any]] = {}
     watcher = asyncio.create_task(service.watch())
     try:
@@ -157,6 +198,141 @@ async def job(value: PayloadInput) -> dict[str, Any]:
         return await app.state.hermes.create_job(value.payload)
     except HermesError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+@app.get("/api/profiles")
+async def list_profiles() -> list[dict[str, Any]]:
+    return app.state.store.list_profiles()
+
+
+@app.post("/api/profiles")
+async def create_profile(value: ProfileInput) -> dict[str, Any]:
+    return app.state.store.create_profile(str(uuid.uuid4()), value.name, value.kind, value.context, value.vault_path)
+
+
+@app.delete("/api/profiles/{profile_id}")
+async def delete_profile(profile_id: str) -> dict[str, str]:
+    try:
+        app.state.store.delete_profile(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    return {"status": "deleted"}
+
+
+@app.get("/api/profiles/{profile_id}/agents")
+async def list_agents(profile_id: str) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_agents(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/agents")
+async def create_agent(profile_id: str, value: AgentInput) -> dict[str, Any]:
+    try:
+        return app.state.store.create_agent(profile_id, str(uuid.uuid4()), value.name, value.role, value.initials)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/tasks")
+async def list_tasks(profile_id: str) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_tasks(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/tasks")
+async def create_task(profile_id: str, value: TaskInput) -> dict[str, Any]:
+    try:
+        return app.state.store.create_task(profile_id, str(uuid.uuid4()), value.title, value.area, value.state)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.patch("/api/profiles/{profile_id}/tasks/{task_id}")
+async def update_task(profile_id: str, task_id: str, value: TaskUpdate) -> dict[str, str]:
+    try:
+        app.state.store.update_task(profile_id, task_id, value.state)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "Task not found") from exc
+    return {"status": "updated"}
+
+
+@app.delete("/api/profiles/{profile_id}/tasks/{task_id}")
+async def delete_task(profile_id: str, task_id: str) -> dict[str, str]:
+    try:
+        app.state.store.delete_task(profile_id, task_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    return {"status": "deleted"}
+
+
+@app.get("/api/profiles/{profile_id}/sources")
+async def list_sources(profile_id: str) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_sources(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/sources")
+async def create_source(profile_id: str, value: SourceInput) -> dict[str, Any]:
+    try:
+        return app.state.store.create_source(profile_id, str(uuid.uuid4()), value.title, value.detail)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/policy")
+async def get_policy(profile_id: str) -> dict[str, Any]:
+    try:
+        return app.state.store.get_policy(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.put("/api/profiles/{profile_id}/policy")
+async def set_policy(profile_id: str, value: PolicyInput) -> dict[str, Any]:
+    try:
+        return app.state.store.set_policy(profile_id, value.autonomy)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@app.get("/api/profiles/{profile_id}/model-routes")
+async def list_model_routes(profile_id: str) -> dict[str, Any]:
+    try:
+        return app.state.store.list_model_routes(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.put("/api/profiles/{profile_id}/model-routes")
+async def set_model_route(profile_id: str, value: ModelRouteInput) -> dict[str, Any]:
+    try:
+        return app.state.store.set_model_route(profile_id, value.agent_id, value.provider, value.model)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/events")
+async def list_events(profile_id: str, limit: int = 100) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_events(profile_id, min(max(limit, 1), 500))
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/global/context")
+async def global_context() -> list[dict[str, Any]]:
+    """Federated view across every profile. Each item carries its own profile_id and name for provenance."""
+    return app.state.store.global_context()
 
 
 @app.post("/api/pairing/start")
