@@ -39,7 +39,7 @@ The global assistant is a federated view. It may retrieve from every profile, bu
 | Profile-isolated contexts | Context files, personalities, memory | Workspace/agent routing | UI foundation implemented; durable runtime storage pending |
 | Global cross-profile assistant | Session search and user model | Multi-agent/team routing | Browser-local federated context implemented; server retrieval pending |
 | Streaming agent loop | Streaming TUI and run lifecycle | Gateway RPC and chat clients | Existing run/event bridge partial; native loop pending |
-| Model/provider routing | Nous, OpenRouter, OpenAI-compatible and others | Model registry and provider auth | Pending |
+| Model/provider routing | Nous, OpenRouter, OpenAI-compatible and others | Model registry and provider auth | Per-agent provider/model overrides are sent with each verified Hermes `/v1/runs` request; native provider registry and credential lifecycle remain pending |
 | Tool system | 40+ tools and toolsets | Tools, plugins, ClawHub | Pending |
 | Automatic skill creation | Learning loop and Agent Skills standard | Skills/plugins ecosystem | Pending evaluation and approval pipeline |
 | Skill self-improvement | Skill updates from experience | Plugin lifecycle | Pending versioned skill registry and regression checks |

@@ -50,11 +50,13 @@ OrbityLabs supports a profile-scoped `auto-safe` policy for routine, reversible 
 
 ```bash
 npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs config set autonomy auto-safe
-npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs models add ollama/llama3.2
+npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs models add ollama:llama3.2
+npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs model ollama:llama3.2
+npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs agent model ceo openrouter:openai/gpt-4.1
 npx --yes --package=github:judahrumende/HERMES-CONNECTOR orbitylabs config list
 ```
 
-The model command records a route for the local runtime configuration; it does not download a model or claim that a provider is available. The provider must be installed and configured separately.
+`orbitylabs model` sets a default route, while `orbitylabs agent model` stores a route for one named agent only. In the command centre, per-agent routes are sent to Hermes on each `/v1/runs` request as the `provider` and `model` fields, so one agent's route does not alter the other agents or the gateway default. A route does not download a model or claim that a provider is available; the provider must be installed and configured separately.
 
 Build a downloadable `.dmg` installer with one command:
 
