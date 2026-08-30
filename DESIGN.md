@@ -1,6 +1,6 @@
 ---
 name: OrbityLabs Orbital Archive
-description: A tactile editorial future for an evidence-led autonomous organisation.
+description: An editorial marketing world paired with a quiet professional operator workspace.
 colors:
   paper: "#efe0bb"
   paper-light: "#f7ebcb"
@@ -11,6 +11,10 @@ colors:
   muted: "#6f674f"
   verified: "#74b97a"
   blocked: "#dc6b50"
+  operator-canvas: "#f6f7f9"
+  operator-surface: "#ffffff"
+  operator-ink: "#17191d"
+  operator-accent: "#5653d8"
 typography:
   display: "Bodoni Moda, Georgia, serif"
   interface: "DM Sans, system-ui, sans-serif"
@@ -26,7 +30,7 @@ rounded:
 
 **Orbital Archive** imagines the autonomous organisation as a hand-drawn future institution: part observatory, part archive, part transit system. Warm fibrous paper, carbon ink, oxidised orange, astronomical geometry, and architectural illustration give the product a tactile cultural home without making the operational interface harder to use.
 
-The expressive landing experience and the laptop command centre share one world at different intensities. Marketing uses full illustration, editorial scale, and cinematic sequence. The app uses paper as a rare inspection surface, orange as route emphasis, and archival texture as atmosphere around dense operational data. The paired mobile companion remains a simple conversation surface.
+The product deliberately has two visual registers. Marketing uses full illustration, editorial scale, and cinematic sequence. The command centre is a quiet professional workspace where product state, navigation, conversation, and operator actions remain immediately legible. The paired mobile companion remains a focused messaging and pairing surface.
 
 ## Image system
 
@@ -42,7 +46,7 @@ Images use fibrous paper, ink bleed, risograph grain, technical construction lin
 
 ## Typography
 
-Bodoni Moda is the editorial display voice. It is used for major landing statements and selected command-centre headings. DM Sans carries interface copy and controls. JetBrains Mono remains limited to commands, identifiers, timestamps, and measured machine state.
+Bodoni Moda is the editorial display voice and belongs to marketing. DM Sans or Inter carries the command centre, interface copy, controls, and page titles. JetBrains Mono remains limited to commands, identifiers, timestamps, and measured machine state.
 
 - Hero display: 64–118px, regular, line-height .86–.94, tracking no tighter than -0.04em.
 - Section display: 44–88px, regular, line-height .92–1.02.
@@ -65,7 +69,16 @@ Sections meet at hard editorial seams. Panels use rules and material contrast ra
 
 ## Operational adaptation
 
-The app stays scan-first. Carbon planes, hairline brass rules, legible tables, and explicit status language remain primary. Parchment appears only where it improves orientation: the command-agent surface, selected navigation, inspection panels, and illustrated empty states. Green means observed or verified. Red means actually blocked. Unknown and unconfigured states remain neutral.
+The application is the **Operator Workspace**, not a reduced version of the landing page.
+
+- Use a warm-neutral `#f6f7f9` canvas, white work surfaces, dark ink, and indigo `#5653d8` for primary actions and selected routes.
+- Keep the sidebar compact. Eight frequent routes stay visible; secondary controls live behind a real More tools menu. The desktop rail collapses to icons and remains a drawer on small screens.
+- Use 30px page titles, 12–13px body copy, and 9–11px metadata. Every operational heading uses the interface typeface.
+- Working surfaces use 12–14px radii, quiet one-pixel rules, and low-elevation shadows. Avoid giant decorative empty states.
+- Empty states explain what is missing and expose a real next action. Profile creation happens directly on the Profiles page.
+- The global assistant is a contained conversation canvas with runtime state, scoped profile context, a centred first-use state, and a fixed composer.
+- No generated artwork, archival texture, display serif, or marketing ornament appears inside the application.
+- Green means observed or verified. Red means actually blocked. Unknown and unconfigured states remain neutral.
 
 ## Motion
 
