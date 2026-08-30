@@ -95,12 +95,14 @@ function useHermes() {
 }
 
 export default function FinishedApp({ landing }: { landing: (onEnter: () => void) => React.ReactNode }) {
-  const isDesktop = typeof navigator !== 'undefined' && (navigator.userAgent.includes('Electron') || (import.meta.env.DEV && new URLSearchParams(location.search).has('desktop-preview')));
+  const query = new URLSearchParams(location.search);
+  const isDesktop = typeof navigator !== 'undefined' && (navigator.userAgent.includes('Electron') || (import.meta.env.DEV && query.has('desktop-preview')));
+  const forceLanding = !isDesktop && query.has('landing');
   const [inside, setInside] = useStored('hermes.inside.v2', isDesktop);
   const [showSetupCelebration, setShowSetupCelebration] = useState(() => { const pending = localStorage.getItem('orbitylabs.hermes.setup.pending') === '1'; if (pending) localStorage.removeItem('orbitylabs.hermes.setup.pending'); return pending; });
   const [session, setSession] = useState<Session | null>(null);
   const [authReady, setAuthReady] = useState(isDesktop || !supabaseAuthConfigured);
-  const pairing = new URLSearchParams(location.search);
+  const pairing = query;
   const isPhone = matchMedia('(max-width: 720px)').matches;
   const paired = Boolean(localStorage.getItem('hermes.mobile.pairing'));
   useEffect(() => { if (!showSetupCelebration) return; const timer = window.setTimeout(() => setShowSetupCelebration(false), 2000); return () => window.clearTimeout(timer); }, [showSetupCelebration]);
@@ -111,6 +113,7 @@ export default function FinishedApp({ landing }: { landing: (onEnter: () => void
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
     return () => { active = false; listener.subscription.unsubscribe(); };
   }, []);
+  if (forceLanding) return <>{landing(() => { query.delete('landing'); history.replaceState({}, '', `${location.pathname}${query.size ? `?${query}` : ''}`); setInside(true); })}</>;
   if (isPhone && (pairing.has('pair') || pairing.has('token') || !paired)) return <MobilePairing />;
   if (showSetupCelebration) return <SetupCelebration />;
   if (!inside && !isDesktop && !(isPhone && paired)) return <>{landing(() => setInside(true))}</>;
