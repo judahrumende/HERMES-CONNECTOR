@@ -195,6 +195,33 @@ CREATE TABLE IF NOT EXISTS scheduled_directives (
     PRIMARY KEY (profile_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_directives_profile ON scheduled_directives(profile_id, enabled);
+
+CREATE TABLE IF NOT EXISTS memories (
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL DEFAULT '',
+    key TEXT NOT NULL,
+    content TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, agent_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    profile_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    messages_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, session_id)
+);
+
+CREATE TABLE IF NOT EXISTS skill_docs (
+    profile_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, name)
+);
 """
 
 
@@ -892,3 +919,99 @@ class Store:
                     }
                 )
             return result
+
+    # -- agent memory (Hermes-style persistent notes) --------------------------------
+
+    def upsert_memory(self, profile_id: str, agent_id: str, key: str, content: str) -> None:
+        at = now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO memories (profile_id, agent_id, key, content, updated_at) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(profile_id, agent_id, key) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at",
+                (profile_id, agent_id, key, content, at),
+            )
+
+    def list_memories(self, profile_id: str, agent_id: str, prefix: str = "") -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            if prefix:
+                rows = conn.execute(
+                    "SELECT key, content, updated_at FROM memories WHERE profile_id = ? AND agent_id = ? AND key LIKE ? ORDER BY updated_at DESC",
+                    (profile_id, agent_id, f"{prefix}%"),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT key, content, updated_at FROM memories WHERE profile_id = ? AND agent_id = ? ORDER BY updated_at DESC",
+                    (profile_id, agent_id),
+                ).fetchall()
+            return [dict(row) for row in rows]
+
+    def delete_memory(self, profile_id: str, agent_id: str, key: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM memories WHERE profile_id = ? AND agent_id = ? AND key = ?",
+                (profile_id, agent_id, key),
+            )
+
+    # -- conversation session history ------------------------------------------------
+
+    def get_session(self, profile_id: str, session_id: str) -> str:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT messages_json FROM sessions WHERE profile_id = ? AND session_id = ?",
+                (profile_id, session_id),
+            ).fetchone()
+            return row["messages_json"] if row else "[]"
+
+    def save_session(self, profile_id: str, session_id: str, messages_json: str) -> None:
+        at = now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO sessions (profile_id, session_id, messages_json, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(profile_id, session_id) DO UPDATE SET messages_json = excluded.messages_json, updated_at = excluded.updated_at",
+                (profile_id, session_id, messages_json, at),
+            )
+
+    def list_sessions(self, profile_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT session_id, updated_at FROM sessions WHERE profile_id = ? ORDER BY updated_at DESC LIMIT 50",
+                (profile_id,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    # -- agent-created skill docs (Hermes learning loop) -----------------------------
+
+    def upsert_skill_doc(self, profile_id: str, agent_id: str, name: str, description: str, content: str) -> None:
+        at = now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO skill_docs (profile_id, agent_id, name, description, content, updated_at) VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(profile_id, name) DO UPDATE SET agent_id = excluded.agent_id, description = excluded.description, content = excluded.content, updated_at = excluded.updated_at",
+                (profile_id, agent_id, name, description, content, at),
+            )
+
+    def list_skill_docs(self, profile_id: str, agent_id: str = "") -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            if agent_id:
+                rows = conn.execute(
+                    "SELECT name, description, updated_at FROM skill_docs WHERE profile_id = ? AND agent_id = ? ORDER BY updated_at DESC",
+                    (profile_id, agent_id),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT name, description, agent_id, updated_at FROM skill_docs WHERE profile_id = ? ORDER BY updated_at DESC",
+                    (profile_id,),
+                ).fetchall()
+            return [dict(row) for row in rows]
+
+    def get_skill_doc(self, profile_id: str, name: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM skill_docs WHERE profile_id = ? AND name = ?",
+                (profile_id, name),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def delete_skill_doc(self, profile_id: str, name: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM skill_docs WHERE profile_id = ? AND name = ?", (profile_id, name))

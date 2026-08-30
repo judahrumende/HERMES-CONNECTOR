@@ -23,6 +23,9 @@ export type Approval = { id: string; profile_id: string; agent_id: string; sessi
 export type ToolEvent = { id: number; profile_id: string; run_id: string; agent_id: string; tool_name: string; input: Record<string, unknown>; output: Record<string, unknown>; status: string; duration_ms: number; at: string };
 export type DoctorCheck = { name: string; status: 'ok' | 'warning' | 'error'; detail: string };
 export type DoctorReport = { checks: DoctorCheck[]; gateway: Record<string, unknown>; config_file: string; db_stats: Record<string, number> };
+export type RuntimeConfig = { provider: string; model: string; api_key_set: boolean; base_url: string; mode: string; ready: boolean };
+export type AgentMemory = { key: string; content: string; updated_at: string };
+export type SkillDoc = { name: string; description: string; agent_id: string; updated_at: string };
 
 async function apiRequest<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...options });
@@ -441,6 +444,64 @@ export function useAgentNotes(profileId: string, agentId: string) {
     }
   };
   return { notes, setNotes, save, saving };
+}
+
+// -- runtime config ------------------------------------------------------------
+export function useRuntimeConfig() {
+  const [config, setConfig] = useState<RuntimeConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const load = () => apiRequest<RuntimeConfig>('/api/runtime/config').then(setConfig).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const save = async (provider: string, model: string, apiKey: string, baseUrl = '') => {
+    setSaving(true);
+    try {
+      const result = await apiRequest<Record<string, unknown>>('/api/runtime/config', {
+        method: 'PUT',
+        body: JSON.stringify({ provider, model, api_key: apiKey, base_url: baseUrl }),
+      });
+      await load();
+      return result;
+    } finally { setSaving(false); }
+  };
+  return { config, save, saving, reload: load };
+}
+
+// -- agent memories ------------------------------------------------------------
+export function useAgentMemories(profileId: string, agentId: string) {
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
+  const isReal = Boolean(profileId && profileId !== 'unassigned' && agentId);
+  const load = () => {
+    if (!isReal) { setMemories([]); return; }
+    apiRequest<AgentMemory[]>(`/api/profiles/${profileId}/agents/${encodeURIComponent(agentId)}/memories`)
+      .then(setMemories).catch(() => setMemories([]));
+  };
+  useEffect(() => { load(); }, [profileId, agentId, isReal]);
+  const upsert = async (key: string, content: string) => {
+    await apiRequest(`/api/profiles/${profileId}/agents/${encodeURIComponent(agentId)}/memories`, {
+      method: 'PUT', body: JSON.stringify({ key, content }),
+    });
+    load();
+  };
+  const remove = async (key: string) => {
+    await apiRequest(`/api/profiles/${profileId}/agents/${encodeURIComponent(agentId)}/memories/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    load();
+  };
+  return { memories, upsert, remove, reload: load };
+}
+
+// -- skill docs (agent-created learning loop) ----------------------------------
+export function useSkillDocs(profileId: string) {
+  const [docs, setDocs] = useState<SkillDoc[]>([]);
+  const isReal = Boolean(profileId && profileId !== 'unassigned');
+  useEffect(() => {
+    if (!isReal) { setDocs([]); return; }
+    apiRequest<SkillDoc[]>(`/api/profiles/${profileId}/skill-docs`).then(setDocs).catch(() => setDocs([]));
+  }, [profileId, isReal]);
+  const remove = async (name: string) => {
+    await apiRequest(`/api/profiles/${profileId}/skill-docs/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    setDocs(d => d.filter(x => x.name !== name));
+  };
+  return { docs, remove };
 }
 
 // -- webhook url helper ---------------------------------------------------------

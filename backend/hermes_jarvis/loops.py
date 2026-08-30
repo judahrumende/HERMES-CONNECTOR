@@ -12,12 +12,12 @@ import time
 from typing import Any
 
 from .hermes import HermesError
-from .service import HermesService, Hub
+from .service import Hub, RuntimeService
 from .store import Store
 
 
 class AgentLoopScheduler:
-    def __init__(self, store: Store, hermes: HermesService, hub: Hub) -> None:
+    def __init__(self, store: Store, hermes: RuntimeService, hub: Hub) -> None:
         self.store, self.hermes, self.hub = store, hermes, hub
         self._next_due: dict[tuple[str, str], float] = {}
 
@@ -39,10 +39,10 @@ class AgentLoopScheduler:
 
     async def run_loop(self, loop: dict[str, Any]) -> None:
         profile_id, agent_id = loop["profile_id"], loop["agent_id"]
-        if self.hermes.snapshot.get("status") != "online":
+        if self.hermes.snapshot.get("status") not in ("online",):
             await self.hermes.refresh()
-        if self.hermes.snapshot.get("status") != "online":
-            detail = "Hermes runtime is not verified online; loop was not started."
+        if self.hermes.mode == "none":
+            detail = "No runtime configured. Add an API key in Settings → Runtime."
             self.store.mark_agent_loop(profile_id, agent_id, error=detail)
             await self.hub.publish("agent.loop_skipped", {"profile_id": profile_id, "agent_id": agent_id, "reason": detail})
             return
@@ -78,11 +78,11 @@ class AgentLoopScheduler:
     async def run_directive(self, directive: dict[str, Any]) -> None:
         profile_id, directive_id = directive["profile_id"], directive["id"]
         agent_id = directive.get("agent_id", "")
-        if self.hermes.snapshot.get("status") != "online":
-            await self.hermes.refresh()
-        if self.hermes.snapshot.get("status") != "online":
-            self.store.mark_directive_run(profile_id, directive_id, error="Hermes runtime is not verified online; directive was not started.")
+        if self.hermes.mode == "none":
+            self.store.mark_directive_run(profile_id, directive_id, error="No runtime configured.")
             return
+        if self.hermes.snapshot.get("status") not in ("online",):
+            await self.hermes.refresh()
         agent_notes = self.store.get_agent_notes(profile_id, agent_id) if agent_id else ""
         notes_section = f"\nAgent notes: {agent_notes}" if agent_notes.strip() else ""
         payload = {

@@ -23,9 +23,11 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
+from .connectors.discord import DiscordConnector
+from .connectors.telegram import TelegramConnector
 from .hermes import HermesError
 from .loops import AgentLoopScheduler
-from .service import HermesService, Hub
+from .service import Hub, RuntimeService
 from .store import ProfileNotFound, Store
 
 ROOT = Path(os.getenv("HERMES_JARVIS_ROOT", Path(__file__).resolve().parents[2]))
@@ -453,23 +455,58 @@ def github_skill_search(query: str) -> list[dict[str, str]]:
     return results
 
 
+def _build_connectors() -> list[TelegramConnector | DiscordConnector]:
+    connectors: list[TelegramConnector | DiscordConnector] = []
+    runtime_url = os.getenv("ORBITY_RUNTIME_URL", "http://127.0.0.1:8787")
+    def _id_set(name: str) -> set[str]:
+        return {p.strip() for p in os.getenv(name, "").split(",") if p.strip()}
+
+    tg_token = os.getenv("ORBITY_TELEGRAM_TOKEN", "")
+    tg_profile = os.getenv("ORBITY_TELEGRAM_PROFILE_ID", "")
+    if tg_token and tg_profile:
+        connectors.append(TelegramConnector(
+            token=tg_token,
+            profile_id=tg_profile,
+            agent_id=os.getenv("ORBITY_TELEGRAM_AGENT_ID", ""),
+            runtime_url=runtime_url,
+            allowed_user_ids=_id_set("ORBITY_TELEGRAM_ALLOWED_IDS"),
+        ))
+    dc_token = os.getenv("ORBITY_DISCORD_TOKEN", "")
+    dc_profile = os.getenv("ORBITY_DISCORD_PROFILE_ID", "")
+    if dc_token and dc_profile:
+        raw_channels = os.getenv("ORBITY_DISCORD_CHANNEL_IDS", "")
+        channel_ids = [int(c.strip()) for c in raw_channels.split(",") if c.strip().isdigit()]
+        connectors.append(DiscordConnector(
+            token=dc_token,
+            profile_id=dc_profile,
+            agent_id=os.getenv("ORBITY_DISCORD_AGENT_ID", ""),
+            runtime_url=runtime_url,
+            allowed_channel_ids=channel_ids or None,
+            allowed_user_ids=_id_set("ORBITY_DISCORD_ALLOWED_IDS"),
+        ))
+    return connectors
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     hub = Hub()
-    service = HermesService(hub, STATE_DIR / "connection.json")
+    app.state.store = Store(STATE_DIR / "orbitylabs.db")
+    service = RuntimeService(hub, app.state.store, STATE_DIR / "connection.json")
     service.load()
     app.state.hub, app.state.hermes = hub, service
-    app.state.store = Store(STATE_DIR / "orbitylabs.db")
     app.state.pairings: dict[str, dict[str, Any]] = {}
     watcher = asyncio.create_task(service.watch())
     scheduler = AgentLoopScheduler(app.state.store, service, hub)
     loop_watcher = asyncio.create_task(scheduler.watch())
+    connector_tasks = [asyncio.create_task(c.run()) for c in _build_connectors()]
     try:
         yield
     finally:
         watcher.cancel()
         loop_watcher.cancel()
-        await asyncio.gather(watcher, loop_watcher, return_exceptions=True)
+        for t in connector_tasks:
+            t.cancel()
+        await asyncio.gather(watcher, loop_watcher, *connector_tasks, return_exceptions=True)
 
 
 app = FastAPI(title="Hermes Jarvis", version="1.0.0", lifespan=lifespan)
@@ -495,7 +532,7 @@ async def status() -> dict[str, Any]:
 @app.put("/api/hermes/connection")
 async def connect(value: ConnectionInput) -> dict[str, Any]:
     try:
-        app.state.hermes.configure(value.base_url)
+        app.state.hermes.configure_bridge(value.base_url)
         return await app.state.hermes.refresh()
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
@@ -522,12 +559,120 @@ async def stop_run(run_id: str) -> dict[str, Any]:
         raise HTTPException(502, str(exc)) from exc
 
 
+@app.post("/api/runs")
+async def run_direct(value: PayloadInput) -> dict[str, Any]:
+    """Convenience alias for /api/hermes/runs — used by the hermes CLI and connectors."""
+    try:
+        return await app.state.hermes.run(value.payload)
+    except HermesError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
 @app.post("/api/hermes/jobs")
 async def job(value: PayloadInput) -> dict[str, Any]:
     try:
-        return await app.state.hermes.create_job(value.payload)
+        if hasattr(app.state.hermes, "create_job"):
+            return await app.state.hermes.create_job(value.payload)
+        return await app.state.hermes.run(value.payload)
     except HermesError as exc:
         raise HTTPException(502, str(exc)) from exc
+
+
+# -- Runtime configuration (replaces external Hermes URL requirement) ----------
+
+class RuntimeConfigInput(BaseModel):
+    provider: str = Field(default="anthropic", max_length=50)
+    model: str = Field(default="claude-opus-4-5", max_length=200)
+    api_key: str = Field(default="", max_length=500)
+    base_url: str = Field(default="", max_length=500)
+
+
+@app.get("/api/runtime/config")
+async def get_runtime_config() -> dict[str, Any]:
+    cfg = app.state.hermes.config
+    return {
+        "provider": cfg.provider,
+        "model": cfg.model,
+        "api_key_set": bool(cfg.api_key),
+        "base_url": cfg.base_url,
+        "mode": app.state.hermes.mode,
+        "ready": cfg.ready,
+    }
+
+
+@app.put("/api/runtime/config")
+async def set_runtime_config(value: RuntimeConfigInput) -> dict[str, Any]:
+    if not value.api_key.strip():
+        raise HTTPException(422, "API key is required")
+    app.state.hermes.configure_local(value.provider, value.model, value.api_key.strip(), value.base_url.strip())
+    return await app.state.hermes.refresh()
+
+
+# -- Memory endpoints (Hermes Agent-style persistent notes) --------------------
+
+class MemoryInput(BaseModel):
+    key: str = Field(..., max_length=200)
+    content: str = Field(..., max_length=10000)
+
+
+@app.get("/api/profiles/{profile_id}/agents/{agent_id}/memories")
+async def list_agent_memories(profile_id: str, agent_id: str, prefix: str = "") -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_memories(profile_id, agent_id, prefix)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.put("/api/profiles/{profile_id}/agents/{agent_id}/memories")
+async def upsert_agent_memory(profile_id: str, agent_id: str, value: MemoryInput) -> dict[str, Any]:
+    try:
+        app.state.store.upsert_memory(profile_id, agent_id, value.key, value.content)
+        return {"key": value.key, "content": value.content}
+    except ProfileNotFound as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.delete("/api/profiles/{profile_id}/agents/{agent_id}/memories/{key}")
+async def delete_agent_memory(profile_id: str, agent_id: str, key: str) -> dict[str, Any]:
+    try:
+        app.state.store.delete_memory(profile_id, agent_id, key)
+        return {"deleted": key}
+    except ProfileNotFound as exc:
+        raise HTTPException(404, str(exc))
+
+
+# -- Skill docs (agent-created learning loop skills) ----------------------------
+
+@app.get("/api/profiles/{profile_id}/skill-docs")
+async def list_skill_docs(profile_id: str, agent_id: str = "") -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_skill_docs(profile_id, agent_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, str(exc))
+
+
+@app.get("/api/profiles/{profile_id}/skill-docs/{name}")
+async def get_skill_doc(profile_id: str, name: str) -> dict[str, Any]:
+    doc = app.state.store.get_skill_doc(profile_id, name)
+    if not doc:
+        raise HTTPException(404, "Skill doc not found")
+    return doc
+
+
+@app.delete("/api/profiles/{profile_id}/skill-docs/{name}")
+async def delete_skill_doc(profile_id: str, name: str) -> dict[str, Any]:
+    app.state.store.delete_skill_doc(profile_id, name)
+    return {"deleted": name}
+
+
+# -- Session history ------------------------------------------------------------
+
+@app.get("/api/profiles/{profile_id}/sessions")
+async def list_sessions(profile_id: str) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_sessions(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, str(exc))
 
 
 @app.get("/api/profiles")
@@ -908,6 +1053,16 @@ async def decide_approval(profile_id: str, approval_id: str, value: ApprovalDeci
                 app.state.store.record_event(profile_id, "approval.run_started", {"approval_id": approval_id, "run_id": run_id})
             except HermesError as exc:
                 raise HTTPException(502, f"Approval granted but Hermes run failed: {exc}") from exc
+    elif value.state == "approved" and approval.get("kind") == "tool_action":
+        payload = approval.get("payload") or {}
+        tool, inputs = payload.get("tool"), (payload.get("inputs") or {})
+        run_id = str(payload.get("run_id") or "")
+        if tool:
+            try:
+                await app.state.hermes.execute_approved_tool(profile_id, approval.get("agent_id", ""), tool, inputs, run_id)
+                app.state.store.record_event(profile_id, "approval.tool_executed", {"approval_id": approval_id, "tool": tool})
+            except HermesError as exc:
+                raise HTTPException(502, f"Approval granted but the action failed: {exc}") from exc
 
     try:
         return app.state.store.decide_approval(profile_id, approval_id, value.state, run_id)

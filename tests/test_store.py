@@ -120,6 +120,23 @@ def test_agent_output_and_continuous_loop_are_profile_scoped(store: Store) -> No
     assert store.agent_loop_candidates()[0]["last_run_id"] == "run-1"
 
 
+def test_scheduled_directives_are_persistent_and_profile_scoped(store: Store) -> None:
+    store.create_profile("a", "A", "", "", "")
+    store.create_profile("b", "B", "", "", "")
+    store.create_agent("a", "ceo", "CEO", "Operations", "CE")
+
+    directive = store.create_scheduled_directive("a", "ceo", "Prepare an operating brief", 3600)
+    assert directive["profile_id"] == "a"
+    assert directive["agent_id"] == "ceo"
+    assert store.list_scheduled_directives("b") == []
+
+    updated = store.update_scheduled_directive("a", directive["id"], interval_seconds=21600, enabled=False)
+    assert updated is not None
+    assert updated["interval_seconds"] == 21600
+    assert updated["enabled"] == 0
+    assert store.list_scheduled_directives("a")[0]["directive"] == "Prepare an operating brief"
+
+
 def test_paired_device_secret_is_hashed_and_manifest_has_no_secret(store: Store) -> None:
     store.create_profile("a", "A", "", "Private context", "/tmp/vault-a")
     store.create_agent("a", "ceo", "CEO", "Operations", "CE")

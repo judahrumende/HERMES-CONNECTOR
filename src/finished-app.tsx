@@ -8,18 +8,18 @@ import { ConnectorsPage, GraphifyPage } from './graphify-page';
 import { OperationsMonitor } from './operations-monitor';
 import { SkillsPage } from './skills-page';
 import {
-  Activity, AlertCircle, ArrowRight, Bell, Bot, Check, ChevronLeft, ChevronRight,
+  Activity, AlertCircle, ArrowRight, Bell, Bot, CalendarClock, Check, ChevronLeft, ChevronRight,
   Camera, Circle, CornerDownLeft, Database, Download, FileJson, Image as ImageIcon, Inbox, LayoutDashboard, ListFilter,
   ListChecks, Menu, MessageSquare, Mic, Minimize2, MoreHorizontal, Network, PanelLeftClose, PanelLeftOpen, Paperclip, Pencil, Plus, RefreshCw, Search, Send,
-  Settings, ShieldCheck, Sparkles, Stethoscope, Timer, Upload, UserPlus, Users, Webhook, X, Zap, Copy as CopyIcon, ScanLine, Smartphone, Laptop, Layers, GitBranch, Plug, Square, Wrench, Monitor,
+  Settings, ShieldCheck, Sparkles, Stethoscope, Timer, Trash2, Upload, UserPlus, Users, Webhook, X, Zap, Copy as CopyIcon, ScanLine, Smartphone, Laptop, Layers, GitBranch, Plug, Square, Wrench, Monitor, Pause, Play,
 } from 'lucide-react';
 import './convos-app.css';
 import './branding.css';
 import './profile.css';
 import './ground-track.css';
 import './command-centre-v2.css';
-import { createGroupRun, exportApprovals, exportProfile, fetchGlobalContext, importProfile, searchMessages, stopRun, useAgentNotes, useDoctorReport, useMessagePreviews, useProfileAgents, useProfileApprovals, useProfileMessages, useProfileModelRoutes, useProfilePolicy, useProfileRuns, useProfileSkills, useProfileSources, useProfileTasks, useProfileToolEvents, useProfiles, useScheduledDirectives, useVaultDiff, webhookUrl } from './lib/profile-api';
-import type { AgentRuntime, Approval, ApprovalMode, DoctorCheck, GroupRunResult, Role, Run, ScheduledDirective, Source, Status, Task, ToolEvent, VaultFile, WorkspaceProfile } from './lib/profile-api';
+import { createGroupRun, exportApprovals, exportProfile, fetchGlobalContext, importProfile, searchMessages, stopRun, useAgentMemories, useAgentNotes, useDoctorReport, useMessagePreviews, useProfileAgents, useProfileApprovals, useProfileMessages, useProfileModelRoutes, useProfilePolicy, useProfileRuns, useProfileSkills, useProfileSources, useProfileTasks, useProfileToolEvents, useProfiles, useRuntimeConfig, useScheduledDirectives, useSkillDocs, useVaultDiff, webhookUrl } from './lib/profile-api';
+import type { AgentMemory, AgentRuntime, Approval, ApprovalMode, DoctorCheck, GroupRunResult, Role, Run, RuntimeConfig, ScheduledDirective, SkillDoc, Source, Status, Task, ToolEvent, VaultFile, WorkspaceProfile } from './lib/profile-api';
 
 type View = 'overview' | 'setup' | 'messages' | 'work' | 'agents' | 'skills' | 'knowledge' | 'approvals' | 'settings' | 'pairing' | 'profiles' | 'global' | 'graphify' | 'connectors' | 'doctor' | 'timeline' | 'schedule' | 'operations';
 type Kind = 'directive' | 'task' | 'role' | 'group' | 'source' | 'connection' | 'job' | null;
@@ -54,6 +54,44 @@ function extractResponseText(value: unknown, depth = 0): string | null {
   return null;
 }
 
+type ScheduleRequest = { directive: string; intervalSeconds: number };
+
+function parseDuration(value: string): number | null {
+  const explicit = value.match(/\b(?:every|each)\s+(\d+)\s*(minute|hour|day|week)s?\b/i);
+  if (explicit) {
+    const amount = Number(explicit[1]);
+    const seconds = explicit[2].toLowerCase().startsWith('minute') ? 60 : explicit[2].toLowerCase().startsWith('hour') ? 3600 : explicit[2].toLowerCase().startsWith('day') ? 86400 : 604800;
+    return amount * seconds;
+  }
+  if (/\bevery\s+hour\b|\bhourly\b/i.test(value)) return 3600;
+  if (/\bevery\s+day\b|\bdaily\b/i.test(value)) return 86400;
+  if (/\bevery\s+week\b|\bweekly\b/i.test(value)) return 604800;
+  return null;
+}
+
+function parseScheduleRequest(value: string): ScheduleRequest | null {
+  if (!/\bschedul(?:e|ed|ing)\b/i.test(value)) return null;
+  const intervalSeconds = parseDuration(value);
+  if (!intervalSeconds) return null;
+  const directive = value
+    .replace(/^\s*(?:please\s+)?(?:can\s+you\s+)?schedul(?:e|ed|ing)\s+/i, '')
+    .replace(/\s+(?:(?:every|each)\s+\d+\s*(?:minute|hour|day|week)s?|every\s+(?:hour|day|week)|hourly|daily|weekly)\s*[.!?]*$/i, '')
+    .trim();
+  return directive ? { directive, intervalSeconds } : null;
+}
+
+function intervalLabel(seconds: number) {
+  if (seconds % 604800 === 0) return `Every ${seconds / 604800 === 1 ? '' : `${seconds / 604800} `}week${seconds / 604800 === 1 ? '' : 's'}`;
+  if (seconds % 86400 === 0) return `Every ${seconds / 86400 === 1 ? '' : `${seconds / 86400} `}day${seconds / 86400 === 1 ? '' : 's'}`;
+  if (seconds % 3600 === 0) return `Every ${seconds / 3600 === 1 ? '' : `${seconds / 3600} `}hour${seconds / 3600 === 1 ? '' : 's'}`;
+  return `Every ${Math.max(1, Math.round(seconds / 60))} minutes`;
+}
+
+function nextDirectiveRun(item: ScheduledDirective) {
+  const anchor = new Date(item.last_run_at || item.created_at).getTime();
+  return new Date(anchor + item.interval_seconds * 1000);
+}
+
 const nav: Array<{ id: View; label: string; icon: React.ElementType }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard }, { id: 'profiles', label: 'Profiles', icon: Layers }, { id: 'global', label: 'All profiles', icon: MessageSquare }, { id: 'setup', label: 'Steps to do', icon: ListChecks }, { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'work', label: 'Work', icon: Inbox }, { id: 'agents', label: 'Agents', icon: Bot },
@@ -62,6 +100,41 @@ const nav: Array<{ id: View; label: string; icon: React.ElementType }> = [
 
 const primaryNav = nav.filter(item => ['overview', 'profiles', 'global', 'messages', 'work', 'agents', 'skills', 'knowledge'].includes(item.id));
 const utilityNav = nav.filter(item => ['setup', 'connectors', 'graphify', 'operations', 'approvals', 'timeline', 'schedule', 'pairing', 'doctor'].includes(item.id));
+
+// The real tool catalog the local runtime exposes to every agent. Tools marked
+// `needsKey` only activate once the operator adds the relevant key in Settings.
+const AGENT_CAPABILITIES: { group: string; tools: { name: string; detail: string; needsKey?: boolean; gated?: boolean }[] }[] = [
+  { group: 'Core execution', tools: [
+    { name: 'bash', detail: 'Run shell commands (timeout-bounded)' },
+    { name: 'run_python', detail: 'Execute Python snippets' },
+    { name: 'read_file · write_file', detail: 'Read and write files' },
+    { name: 'list_files · search_files', detail: 'Browse and grep the filesystem' },
+    { name: 'http_fetch', detail: 'Fetch URLs and APIs' },
+  ]},
+  { group: 'Memory & learning', tools: [
+    { name: 'memory_write · read · delete', detail: 'Persistent notes across sessions' },
+    { name: 'create_skill', detail: 'Save reusable skills it learns' },
+  ]},
+  { group: 'Tool gateway', tools: [
+    { name: 'web_search', detail: 'Live web search', needsKey: true },
+    { name: 'generate_image', detail: 'Create images from prompts', needsKey: true },
+    { name: 'text_to_speech', detail: 'Voiceovers and audio', needsKey: true },
+  ]},
+  { group: 'Delegation', tools: [
+    { name: 'spawn_agent', detail: 'Delegate sub-tasks to isolated subagents' },
+  ]},
+  { group: 'Ecommerce', tools: [
+    { name: 'shopify', detail: 'Orders, products, inventory (read-only by default; writes need approval)', needsKey: true, gated: true },
+    { name: 'stripe', detail: 'Balance and charges (read-only — cannot move money)', needsKey: true },
+  ]},
+  { group: 'Vibecoding & data', tools: [
+    { name: 'sql_query', detail: 'Query local SQLite databases' },
+  ]},
+  { group: 'Connected apps · Composio', tools: [
+    { name: 'composio_apps', detail: 'Discover connected app actions' },
+    { name: 'composio_action', detail: 'Slack, Gmail, Notion, WhatsApp and hundreds more', needsKey: true, gated: true },
+  ]},
+];
 
 function useStored<T>(key: string, initial: T) {
   const [value, setValue] = useState<T>(() => { try { return JSON.parse(localStorage.getItem(key) || '') as T; } catch { return initial; } });
@@ -192,6 +265,7 @@ function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobil
   const { autonomy: approvalMode, setAutonomy: setApprovalMode } = useProfilePolicy(activeProfile);
   const { routes: agentRuntimes, setRoute: setAgentRoute } = useProfileModelRoutes(activeProfile);
   const { skills, agentSkills, createSkill } = useProfileSkills(activeProfile);
+  const { docs: skillDocs, remove: removeSkillDoc } = useSkillDocs(profileKey);
   const [dialog, setDialog] = useState<Kind>(null), [search, setSearch] = useState(false), [notes, setNotes] = useState(false), [agent, setAgent] = useState(false), [profile, setProfile] = useState(false), [menu, setMenu] = useState(false), [workspaceMenu, setWorkspaceMenu] = useState(false), [moreTools, setMoreTools] = useState(false), [sidebarCollapsed, setSidebarCollapsed] = useStored('orbitylabs.sidebar.collapsed', false);
   useEffect(() => { if (mobileCompanion) setView('messages'); }, [mobileCompanion, setView]);
   useEffect(() => { const interceptProfile = (event: MouseEvent) => { const target = event.target as HTMLElement; if (target.closest('.profile-switcher, .topbar-actions .identity-avatar')) { event.preventDefault(); event.stopPropagation(); setProfile(true); } }; addEventListener('click', interceptProfile, true); return () => removeEventListener('click', interceptProfile, true); }, []);
@@ -212,7 +286,7 @@ function Centre({ onExit, mobileCompanion = false }: { onExit: () => void; mobil
       {view === 'global' && <GlobalChat gateway={hermes.status} events={hermes.events} profiles={profiles} run={hermes.run} />}
       {view === 'work' && <Work tasks={tasks} toggleTask={toggleTask} deleteTask={deleteTask} add={() => setDialog('task')} />}
       {view === 'agents' && <AgentProviderManager roles={roles} gateway={hermes.status} runtimes={agentRuntimes} setRoute={setAgentRoute} add={() => setDialog('role')} />}
-      {view === 'skills' && <SkillsPage profileId={profileKey} profileName={currentProfile?.name || 'this profile'} skills={skills} roles={roles} agentSkills={agentSkills} gateway={hermes.status} createSkill={createSkill} run={hermes.run} />}
+      {view === 'skills' && <SkillsPage profileId={profileKey} profileName={currentProfile?.name || 'this profile'} skills={skills} roles={roles} agentSkills={agentSkills} gateway={hermes.status} createSkill={createSkill} run={hermes.run} skillDocs={skillDocs} removeSkillDoc={removeSkillDoc} />}
       {view === 'knowledge' && <Knowledge sources={sources} add={() => setDialog('source')} />}
       {view === 'graphify' && <GraphifyPage profileId={profileKey} profileName={currentProfile?.name || 'this profile'} />}
       {view === 'connectors' && <ConnectorsPage />}
@@ -415,7 +489,7 @@ function ConvoHome({ gateway, events, roles, openThread, go, newDirective }: { g
     <div className="ground-track-grid">
       <section className="ground-track-panel ground-track-command" aria-labelledby="command-agent-title">
         <div className="ground-track-panel-head"><div><span className="ground-track-eyebrow">Command agent</span><h2 id="command-agent-title">{ceo ? ceo.name : 'Assign a CEO agent'}</h2></div><span className="ground-track-panel-id">{ceo?.id || 'UNASSIGNED'}</span></div>
-        <div className="ground-track-command-body"><AgentAvatar role={ceo} featured size="hero" /><div><p>{ceo ? ceo.role : 'A CEO agent keeps a profile’s directives, agents, and evidence in one operating context.'}</p><span className="ground-track-caption">{gatewayOnline ? 'Available through the verified laptop runtime.' : 'Connection is required before a directive can leave this app.'}</span></div></div>
+        <div className="ground-track-command-body"><AgentAvatar role={ceo} featured size="hero" /><div><p>{ceo ? ceo.role : "A CEO agent keeps a profile's directives, agents, and evidence in one operating context."}</p><span className="ground-track-caption">{gatewayOnline ? 'Available through the verified laptop runtime.' : 'Connection is required before a directive can leave this app.'}</span></div></div>
         <footer><button className="ground-track-link" onClick={() => ceo ? openThread(ceo.id) : go('agents')}>{ceo ? 'Open CEO conversation' : 'Create an agent'} <ArrowRight size={14} /></button><button className="ground-track-link muted" onClick={() => go('agents')}>Manage roster</button></footer>
       </section>
       <section className="ground-track-panel ground-track-evidence" aria-labelledby="evidence-title">
@@ -441,15 +515,19 @@ function Messages({ profileId, storageKey, gateway, events, roles, activeRole, s
   const realProfileId = profileId === 'unassigned' ? '' : profileId;
   const [draft, setDraft] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState(''), [skills, setSkills] = useState(false), [pendingRun, setPendingRun] = useState('');
   const [inspectRunId, setInspectRunId] = useState<string | null>(null);
-  const { messages: sqlMessages, saveMessage } = useProfileMessages(realProfileId, activeRole);
+  const effectiveAgentId = activeRole || roles[0]?.id || '';
+  const { messages: sqlMessages, saveMessage } = useProfileMessages(realProfileId, effectiveAgentId);
   const previews = useMessagePreviews(realProfileId);
-  const { notes: agentNotes, setNotes: setAgentNotes, save: saveAgentNotes } = useAgentNotes(realProfileId, activeRole);
+  const { notes: agentNotes, setNotes: setAgentNotes, save: saveAgentNotes } = useAgentNotes(realProfileId, effectiveAgentId);
+  const { memories, upsert: upsertMemory, remove: removeMemory } = useAgentMemories(realProfileId, effectiveAgentId);
+  const { createDirective: createScheduledDirective } = useScheduledDirectives(realProfileId);
+  const [memTab, setMemTab] = useState<'notes' | 'memory'>('notes');
   const [localMessages, setLocalMessages] = useStored<Record<string, ChatMessage[]>>(storageKey, {});
   const handledEvents = useRef(new Set<string>());
-  const role = roles.find(r => r.id === activeRole) || roles[0];
+  const role = roles.find(r => r.id === effectiveAgentId) || roles[0];
   const thread: ChatMessage[] = sqlMessages.length > 0
     ? sqlMessages.map(m => ({ text: m.text, direction: m.direction as 'outgoing' | 'incoming', status: 'sent' as const }))
-    : (localMessages[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[];
+    : (localMessages[effectiveAgentId] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[];
 
   useEffect(() => {
     for (const item of events) {
@@ -463,31 +541,49 @@ function Messages({ profileId, storageKey, gateway, events, roles, activeRole, s
       const responseText = extractResponseText(item.data.data);
       if (responseText && !/^(queued|accepted|started|completed)$/i.test(responseText)) {
         void saveMessage('incoming', responseText, runId);
-        if (!realProfileId) setLocalMessages(m => ({ ...m, [activeRole]: [...(m[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text: responseText, direction: 'incoming', status: 'sent' }] }));
+        if (!realProfileId) setLocalMessages(m => ({ ...m, [effectiveAgentId]: [...(m[effectiveAgentId] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text: responseText, direction: 'incoming', status: 'sent' }] }));
         setPendingRun('');
       }
       if (/completed|failed|error|cancelled/i.test(event)) setPendingRun('');
     }
-  }, [events, pendingRun, activeRole, saveMessage, realProfileId, setLocalMessages]);
+  }, [events, pendingRun, effectiveAgentId, saveMessage, realProfileId, setLocalMessages]);
 
   if (!role) return <div className="messages-layout imessage-layout"><section className="thread-pane"><div className="compact-empty"><strong>No conversations yet</strong><p>Create or discover a real agent profile before sending a message.</p><button className="button button-outline" onClick={addRole}>Create an agent</button></div></section></div>;
 
   const send = async () => {
     const text = draft.trim(); if (!text || busy) return;
+    const scheduleRequest = parseScheduleRequest(text);
+    if (/\bschedul(?:e|ed|ing)\b/i.test(text) && !scheduleRequest) {
+      setError('Add a repeat interval, for example: “Schedule a competitor report every 2 hours.”');
+      return;
+    }
+    if (scheduleRequest) {
+      if (!realProfileId) { setError('Choose a profile before creating a schedule.'); return; }
+      setBusy(true); setError('');
+      try {
+        const item = await createScheduledDirective(role.id, scheduleRequest.directive, scheduleRequest.intervalSeconds);
+        const confirmation = `${role.name} scheduled “${item.directive}” ${intervalLabel(item.interval_seconds).toLowerCase()}. It is saved in this profile’s Schedule.`;
+        await saveMessage('outgoing', text, '');
+        await saveMessage('incoming', confirmation, '');
+        setDraft('');
+      } catch (e) { setError(e instanceof Error ? e.message : 'The schedule was not saved.'); }
+      finally { setBusy(false); }
+      return;
+    }
     if (gateway.status !== 'online') { setError('Not sent. The runtime is not available.'); return; }
     setBusy(true); setError('');
     try {
       const policy = approvalMode === 'auto_safe'
         ? 'Routine, reversible actions are pre-approved by the operator. Pause for confirmation before irreversible, external, paid, destructive, credential, account-creation, or security-sensitive actions.'
         : 'Ask for operator approval before consequential actions.';
-      const result = await run(`${policy}\n\nDirective: ${text}`, `profile-${profileId}-agent-${activeRole}`, runtime);
+      const result = await run(`${policy}\n\nDirective: ${text}`, `profile-${profileId}-agent-${effectiveAgentId}`, runtime);
       const runId = result && typeof result === 'object' && ('run_id' in result || 'id' in result) ? String((result as { run_id?: unknown; id?: unknown }).run_id || (result as { id?: unknown }).id || '') : '';
       const responseText = extractResponseText(result);
       await saveMessage('outgoing', text, runId);
-      if (!realProfileId) setLocalMessages(m => ({ ...m, [activeRole]: [...(m[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text, direction: 'outgoing', status: 'sent' }] }));
+      if (!realProfileId) setLocalMessages(m => ({ ...m, [effectiveAgentId]: [...(m[effectiveAgentId] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text, direction: 'outgoing', status: 'sent' }] }));
       if (responseText && !runId) {
         await saveMessage('incoming', responseText, '');
-        if (!realProfileId) setLocalMessages(m => ({ ...m, [activeRole]: [...(m[activeRole] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text: responseText, direction: 'incoming', status: 'sent' }] }));
+        if (!realProfileId) setLocalMessages(m => ({ ...m, [effectiveAgentId]: [...(m[effectiveAgentId] || []).map(normalizeChatMessage).filter(Boolean) as ChatMessage[], { text: responseText, direction: 'incoming', status: 'sent' }] }));
       }
       setPendingRun(runId); setDraft('');
     } catch (e) { setError(e instanceof Error ? e.message : 'The runtime did not accept the directive. It was not sent.'); }
@@ -504,11 +600,15 @@ function Messages({ profileId, storageKey, gateway, events, roles, activeRole, s
   return <div className="messages-layout imessage-layout">
     <aside className="conversation-pane"><header><div><h1>Messages</h1><p>{gateway.status === 'online' ? 'Hermes transport available' : 'Local-only conversations'}</p></div><button className="icon-button" onClick={addRole} aria-label="Add planned agent"><Pencil size={19} /></button></header><label className="message-search"><Search size={16} /><input placeholder="Search" onChange={() => undefined} /></label><div className="conversation-list">{roles.map((r, index) => { const preview = getPreview(r.id); return <button key={r.id} className={`conversation-row ${activeRole === r.id ? 'selected' : ''}`} onClick={() => setActiveRole(r.id)}><AgentAvatar role={r} featured={index === 0} /><span><strong>{r.name}</strong><small>{r.role}</small><em>{preview || (gateway.status === 'online' ? 'Ready for a directive' : 'Saved locally')}</em></span><time>{activeRole === r.id ? 'Now' : ''}</time></button>; })}</div></aside>
     <section className="thread-pane"><header className="thread-header"><div><button className="icon-button mobile-back" onClick={closeThread} aria-label="Back"><ChevronLeft size={23} /></button><AgentAvatar role={role} featured={role?.id === 'ceo'} /><span><strong>{role?.name}</strong><small>{gateway.status === 'online' ? 'Hermes available' : 'Local only'}</small></span></div><button className="thread-add" onClick={addGroup} aria-label="Create group chat" title="Create group chat"><Plus size={22} /></button></header>
-      <div className="thread-stream"><div className="thread-intro"><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h2>{role?.name}</h2><p>{role?.role}</p><button onClick={() => setSkills(true)}>See its controls</button></div><div className="system-message"><span className="mini-avatar">JR</span> You direct this agent · Authority stays with you</div>{thread.map((message, index) => { const msgRunId = sqlMessages[index]?.run_id || ''; return <div className={`imessage-row ${message.direction}`} key={`${message.direction}-${index}`}><div className="imessage-bubble" onClick={() => msgRunId ? setInspectRunId(msgRunId === inspectRunId ? null : msgRunId) : undefined} style={msgRunId ? { cursor: 'pointer' } : undefined}>{message.text}</div><small>{message.direction === 'incoming' ? 'Received from Hermes' : 'Sent to Hermes'}{msgRunId && <span className="run-id-chip mono" style={{ marginLeft: 6 }}>{msgRunId.slice(0, 8)}</span>}</small>{inspectRunId === msgRunId && msgRunId && <RunInspector profileId={realProfileId} runId={msgRunId} close={() => setInspectRunId(null)} />}</div>; })}{pendingRun && <div className="agent-message agent-working" role="status"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>Working on your directive...</p></div><button className="icon-button stop-run-btn" onClick={stopPending} title="Stop this run" aria-label="Stop run"><Square size={14} /></button></div>}{!thread.length && !pendingRun && <div className="agent-message"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>{gateway.status === 'online' ? 'What outcome should I coordinate for you?' : 'Connect Hermes to send verified directives. I will not simulate a reply while the runtime is offline.'}</p></div></div>}{error && <div className="form-error" role="alert">{error}</div>}</div>
+      <div className="thread-stream"><div className="thread-intro"><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h2>{role?.name}</h2><p>{role?.role}</p><button onClick={() => setSkills(true)}>See its controls</button></div><div className="system-message"><span className="mini-avatar">JR</span> You direct this agent · Authority stays with you</div>{thread.map((message, index) => { const msgRunId = sqlMessages[index]?.run_id || ''; const scheduleMessage = Boolean(parseScheduleRequest(message.text) || /^.+ scheduled “.+” every /i.test(message.text)); const delivery = scheduleMessage ? (message.direction === 'incoming' ? 'Schedule saved to profile' : 'Schedule request') : message.direction === 'incoming' ? 'Received from Hermes' : 'Sent to Hermes'; return <div className={`imessage-row ${message.direction}`} key={`${message.direction}-${index}`}><div className="imessage-bubble" onClick={() => msgRunId ? setInspectRunId(msgRunId === inspectRunId ? null : msgRunId) : undefined} style={msgRunId ? { cursor: 'pointer' } : undefined}>{message.text}</div><small>{delivery}{msgRunId && <span className="run-id-chip mono" style={{ marginLeft: 6 }}>{msgRunId.slice(0, 8)}</span>}</small>{inspectRunId === msgRunId && msgRunId && <RunInspector profileId={realProfileId} runId={msgRunId} close={() => setInspectRunId(null)} />}</div>; })}{pendingRun && <div className="agent-message agent-working" role="status"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>Working on your directive...</p></div><button className="icon-button stop-run-btn" onClick={stopPending} title="Stop this run" aria-label="Stop run"><Square size={14} /></button></div>}{!thread.length && !pendingRun && <div className="agent-message"><AgentAvatar role={role} featured={role?.id === 'ceo'} /><div><strong>{role?.name}</strong><p>{gateway.status === 'online' ? 'What outcome should I coordinate for you?' : 'Connect Hermes to send verified directives. I will not simulate a reply while the runtime is offline.'}</p></div></div>}{error && <div className="form-error" role="alert">{error}</div>}</div>
       <div className="composer-wrap"><div className="identity-selector"><span className="mini-avatar">JR</span><span>Chat as Judah</span></div><div className="composer"><button className="composer-tool" disabled title="Storage provider required" aria-label="Photo library"><ImageIcon size={20} /></button><button className="composer-tool" disabled title="Camera access is not configured" aria-label="Camera"><Camera size={20} /></button><button className="composer-tool" disabled title="Voice input is not configured" aria-label="Voice message"><Mic size={20} /></button><textarea value={draft} onChange={e => setDraft(e.target.value)} maxLength={12000} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }} placeholder={`Message ${role?.name || 'Hermes'}`} rows={1} /><button className="send-button" onClick={send} disabled={!draft.trim() || busy} aria-label="Send">{busy ? <RefreshCw className="spin" size={16} /> : <Send size={17} />}</button></div><p>{realProfileId ? 'Messages saved to profile database' : gateway.status === 'online' ? 'Creates a verified Hermes run' : 'Saved locally until Hermes is connected'}</p></div>
     </section>
-    <aside className="thread-inspector"><header><h2>Agent controls</h2><button className="icon-button" onClick={settings} aria-label="Settings"><Settings size={18} /></button></header><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h3>{role?.name}</h3><p>{role?.role}</p><dl><div><dt>Session</dt><dd className="mono">profile-{profileId.slice(0, 8)}...</dd></div><div><dt>Provider</dt><dd>{runtime?.provider || 'Gateway default'}</dd></div><div><dt>Model</dt><dd className="mono">{runtime?.model || 'Gateway default'}</dd></div><div><dt>Authority</dt><dd>{approvalMode === 'auto_safe' ? 'Auto-approved routine work' : 'Operator approval required'}</dd></div><div><dt>Status</dt><dd>{statusText(gateway)}</dd></div><div><dt>History</dt><dd>{sqlMessages.length > 0 ? `${sqlMessages.length} messages in database` : 'Local only'}</dd></div></dl><button className="inspector-skills" onClick={() => setSkills(true)}>View controls and skills</button><div className={`policy-badge ${approvalMode === 'auto_safe' ? 'enabled' : ''}`}><span className="status-dot" /><span>{approvalMode === 'auto_safe' ? 'Approve for me is on' : 'Approval gates are on'}</span></div>{realProfileId && <div className="agent-notes-section"><label htmlFor="agent-notes-input"><strong>Context notes</strong><span>Prepended to every loop and directive run</span></label><textarea id="agent-notes-input" className="agent-notes-input" value={agentNotes} onChange={e => setAgentNotes(e.target.value)} onBlur={e => { void saveAgentNotes(e.target.value); }} placeholder="Persistent context for this agent — goals, constraints, current focus..." rows={5} maxLength={10000} /></div>}<div className="context-note"><ShieldCheck size={17} /><p>The selected model is sent only with this agent's run. It does not alter other agents or the gateway default.</p></div></aside>
-    {skills && <div className="skills-sheet" onClick={() => setSkills(false)}><section onClick={event => event.stopPropagation()}><header><div><AgentAvatar role={role} featured={role?.id === 'ceo'} /><span><strong>{role?.name}</strong><small>Controls and capabilities</small></span></div><button className="icon-button" onClick={() => setSkills(false)}><X size={20} /></button></header><div><h2>What this agent can do</h2><p>{gateway.status === 'online' ? 'Capabilities come from the connected Hermes profile. Open Agents to inspect discovered profile data.' : 'No live skills are available because Hermes is not connected.'}</p><button className="button button-outline" onClick={() => { setSkills(false); settings(); }}>Open connection settings</button></div></section></div>}
+    <aside className="thread-inspector"><header><h2>Agent controls</h2><button className="icon-button" onClick={settings} aria-label="Settings"><Settings size={18} /></button></header><AgentAvatar role={role} featured={role?.id === 'ceo'} size="large" /><h3>{role?.name}</h3><p>{role?.role}</p><dl><div><dt>Session</dt><dd className="mono">profile-{profileId.slice(0, 8)}...</dd></div><div><dt>Provider</dt><dd>{runtime?.provider || 'Gateway default'}</dd></div><div><dt>Model</dt><dd className="mono">{runtime?.model || 'Gateway default'}</dd></div><div><dt>Authority</dt><dd>{approvalMode === 'auto_safe' ? 'Auto-approved routine work' : 'Operator approval required'}</dd></div><div><dt>Status</dt><dd>{statusText(gateway)}</dd></div><div><dt>History</dt><dd>{sqlMessages.length > 0 ? `${sqlMessages.length} messages in database` : 'Local only'}</dd></div></dl><button className="inspector-skills" onClick={() => setSkills(true)}>View controls and skills</button><div className={`policy-badge ${approvalMode === 'auto_safe' ? 'enabled' : ''}`}><span className="status-dot" /><span>{approvalMode === 'auto_safe' ? 'Approve for me is on' : 'Approval gates are on'}</span></div>
+      {realProfileId && <div className="inspector-tabs"><button className={memTab === 'notes' ? 'active' : ''} onClick={() => setMemTab('notes')}>Context notes</button><button className={memTab === 'memory' ? 'active' : ''} onClick={() => setMemTab('memory')}>Memory {memories.length > 0 ? `(${memories.length})` : ''}</button></div>}
+      {realProfileId && memTab === 'notes' && <div className="agent-notes-section"><label htmlFor="agent-notes-input"><span>Prepended to every loop and directive run</span></label><textarea id="agent-notes-input" className="agent-notes-input" value={agentNotes} onChange={e => setAgentNotes(e.target.value)} onBlur={e => { void saveAgentNotes(e.target.value); }} placeholder="Goals, constraints, current focus..." rows={4} maxLength={10000} /></div>}
+      {realProfileId && memTab === 'memory' && <div className="agent-memory-panel">{memories.length === 0 ? <p className="memory-empty">No memories yet. The agent writes here via memory_write.</p> : memories.map(m => <div key={m.key} className="memory-row"><div className="memory-key-row"><code className="memory-key">{m.key}</code><button className="icon-button memory-delete" onClick={() => void removeMemory(m.key)} aria-label="Delete memory"><X size={11} /></button></div><p className="memory-content">{m.content}</p></div>)}</div>}
+      <div className="context-note"><ShieldCheck size={17} /><p>The selected model is sent only with this agent's run. It does not alter other agents or the gateway default.</p></div></aside>
+    {skills && <div className="skills-sheet" onClick={() => setSkills(false)}><section onClick={event => event.stopPropagation()}><header><div><AgentAvatar role={role} featured={role?.id === 'ceo'} /><span><strong>{role?.name}</strong><small>Controls and capabilities</small></span></div><button className="icon-button" onClick={() => setSkills(false)}><X size={20} /></button></header><div><h2>What this agent can do</h2><p>These tools run through the local runtime. <em>needs key</em> tools activate once you add the provider key in Settings. <em>approval</em> tools are outward-facing — they queue for your explicit approval and never send or write silently, even with "Approve for me" on.</p><div className="capability-catalog">{AGENT_CAPABILITIES.map(group => <div className="capability-group" key={group.group}><h3>{group.group}</h3>{group.tools.map(t => <div className="capability-row" key={t.name}><code>{t.name}</code><span>{t.detail}</span>{t.gated && <span className="capability-gate">approval</span>}{t.needsKey && <span className="capability-key">needs key</span>}</div>)}</div>)}</div><button className="button button-outline" onClick={() => { setSkills(false); settings(); }}>Open runtime settings</button></div></section></div>}
   </div>;
 }
 
@@ -661,6 +761,7 @@ function RunTimeline({ profileId, roles }: { profileId: string; roles: Role[] })
 function ScheduleView({ profileId, roles, gateway }: { profileId: string; roles: Role[]; gateway: Gateway }) {
   const { directives, createDirective, updateDirective, deleteDirective } = useScheduledDirectives(profileId);
   const [form, setForm] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [directive, setDirective] = useState(''), [agentId, setAgentId] = useState(''), [interval, setInterval] = useState(3600);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
 
@@ -672,41 +773,178 @@ function ScheduleView({ profileId, roles, gateway }: { profileId: string; roles:
     finally { setBusy(false); }
   };
 
-  return <div className="page">
-    <Head title="Schedule" copy="Directives that run automatically at a configured interval.">
-      <button className="button button-secondary" onClick={() => setForm(v => !v)}><Plus size={14} /> New directive</button>
+  const selected = directives.find(item => item.id === selectedId) || null;
+  useEffect(() => { if (selectedId && !selected) setSelectedId(null); }, [selectedId, selected]);
+
+  if (selected) return <ScheduleDetail item={selected} roles={roles} gateway={gateway} close={() => setSelectedId(null)} update={updates => updateDirective(selected.id, updates)} remove={async () => { await deleteDirective(selected.id); setSelectedId(null); }} />;
+
+  return <div className="page schedule-page">
+    <Head title="Scheduled work" copy="Recurring directives owned by this profile and executed by its laptop runtime.">
+      <button className="button button-secondary" onClick={() => setForm(v => !v)}><Plus size={14} /> New schedule</button>
     </Head>
     {form && <form className="schedule-form" onSubmit={submit}>
-      <label>Directive<textarea value={directive} onChange={e => setDirective(e.target.value)} rows={3} placeholder="What should the agent do on each run?" required /></label>
-      <label>Agent<select value={agentId} onChange={e => setAgentId(e.target.value)}><option value="">Default (no specific agent)</option>{roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label>
-      <label>Interval (seconds)<input type="number" min={60} max={604800} value={interval} onChange={e => setInterval(Number(e.target.value))} /></label>
+      <div className="schedule-form-copy"><CalendarClock size={22} /><div><h2>Create scheduled work</h2><p>The selected agent will receive this directive whenever the interval is due.</p></div></div>
+      <label>Directive<textarea value={directive} onChange={e => setDirective(e.target.value)} rows={3} placeholder="Describe the recurring outcome" required /></label>
+      <div className="schedule-form-row"><label>Agent<select value={agentId} onChange={e => setAgentId(e.target.value)}><option value="">Profile default</option>{roles.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}</select></label><label>Repeat<select value={interval} onChange={e => setInterval(Number(e.target.value))}><option value={900}>Every 15 minutes</option><option value={3600}>Every hour</option><option value={21600}>Every 6 hours</option><option value={86400}>Every day</option><option value={604800}>Every week</option></select></label></div>
       {error && <p className="form-error">{error}</p>}
-      <div className="form-actions"><button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Saving...' : 'Save directive'}</button><button className="button button-quiet" type="button" onClick={() => setForm(false)}>Cancel</button></div>
+      <div className="form-actions"><button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Saving...' : 'Create schedule'}</button><button className="button button-quiet" type="button" onClick={() => setForm(false)}>Cancel</button></div>
     </form>}
-    {gateway.status !== 'online' && <div className="form-error">Hermes is offline — scheduled directives will not fire until the runtime is online.</div>}
+    {gateway.status !== 'online' && <div className="schedule-runtime-warning"><AlertCircle size={15} /><span>Schedules remain saved, but they only run while the laptop runtime is online.</span></div>}
     {directives.length === 0 && !form
-      ? <Empty title="No scheduled directives" copy="Add a directive and it will fire automatically at the configured interval." />
+      ? <Empty title="Nothing scheduled yet" copy="Ask an agent to schedule recurring work, or create a schedule here." />
       : <div className="schedule-list">{directives.map(d => {
           const agent = roles.find(r => r.id === d.agent_id);
-          return <div key={d.id} className={`schedule-card ${d.enabled ? '' : 'disabled'}`}>
+          const nextRun = nextDirectiveRun(d);
+          return <button key={d.id} className={`schedule-card ${d.enabled ? '' : 'disabled'}`} onClick={() => setSelectedId(d.id)}>
             <div className="schedule-card-head">
-              <span className="quiet-badge">{agent?.name || 'Default agent'}</span>
-              <span className="quiet-badge">{d.interval_seconds >= 3600 ? `${Math.round(d.interval_seconds / 3600)}h` : `${Math.round(d.interval_seconds / 60)}m`}</span>
-              <span className={`status-dot ${d.enabled ? 'green' : 'idle'}`} />
+              <span className="schedule-agent-mark">{agent?.initials || 'OL'}</span>
+              <span><strong>{agent?.name || 'Profile default'}</strong><small>Created and owned by this agent</small></span>
+              <span className={`schedule-state ${d.enabled ? 'running' : 'paused'}`}>{d.enabled ? 'Active' : 'Paused'}</span>
             </div>
             <p className="schedule-directive">{d.directive}</p>
-            {d.last_run_at && <small className="mono">Last run: {d.last_run_at.slice(0, 19).replace('T', ' ')}</small>}
+            <div className="schedule-card-meta"><span><Timer size={14} />{intervalLabel(d.interval_seconds)}</span><span><CalendarClock size={14} />{d.enabled ? `Next ${new Intl.DateTimeFormat(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' }).format(nextRun)}` : 'No run while paused'}</span></div>
             {d.last_error && <p className="form-error schedule-error">{d.last_error}</p>}
-            <div className="schedule-card-actions">
-              <button className="button button-quiet" onClick={() => updateDirective(d.id, { enabled: !d.enabled })}>{d.enabled ? 'Pause' : 'Enable'}</button>
-              <button className="button button-quiet danger" onClick={() => deleteDirective(d.id)}>Delete</button>
-            </div>
-          </div>;
+            <span className="schedule-open">Open schedule <ArrowRight size={14} /></span>
+          </button>;
         })}</div>}
   </div>;
 }
 
-function SettingsView({ gateway, refresh, configure, job }: { gateway: Gateway; refresh: () => void; configure: () => void; job: () => void }) { const [tab, setTab] = useState('Connections'); const tabs = ['Connections','Organisation','Models','Security','Appearance']; const models = count(gateway.models, ['data','models']), jobs = count(gateway.jobs, ['data','jobs']); return <div className="page"><Head title="Settings" copy="Configure infrastructure and inspect what is actually available." /><div className="settings-layout"><nav className="settings-nav">{tabs.map(v => <button key={v} className={tab === v ? 'active' : ''} onClick={() => setTab(v)}>{v}</button>)}</nav><section className="settings-content"><Panel title={tab} subtitle={tab === 'Connections' ? 'Credentials remain server-side' : 'Command-centre preferences'} />{tab === 'Connections' && <><Connection icon={Network} title="Hermes Gateway" detail={gateway.base_url || 'Required for profiles, messages, events, and jobs'} state={statusText(gateway)} action={configure} /><Connection icon={Zap} title="Background jobs" detail="Hermes Jobs API enables scheduled unattended work" state={jobs === null ? 'Not observed' : `${jobs} configured`} action={job} disabled={gateway.status !== 'online'} /><div className="settings-actions"><button className="button button-outline" onClick={refresh}><RefreshCw size={14} /> Recheck connection</button></div></>}{tab === 'Organisation' && <Empty title="Organisation mapping is local" copy="Planned roles persist in this browser; discovered profiles come from Hermes." />}{tab === 'Models' && <Empty title={models === null ? 'No models observed' : `${models} models observed`} copy="Connect Hermes to discover current routes." />}{tab === 'Security' && <div className="settings-copy"><ShieldCheck size={18} /><h3>Server-side credentials</h3><p>The browser never receives HERMES_API_KEY. Put it in the server environment and restart the bridge.</p></div>}{tab === 'Appearance' && <div className="settings-copy"><h3>Quiet command centre</h3><p>The theme follows the project design system and reduced-motion preference.</p></div>}</section></div></div>; }
+type ScheduleChatMessage = { direction: 'incoming' | 'outgoing'; text: string };
+
+function ScheduleDetail({ item, roles, gateway, close, update, remove }: { item: ScheduledDirective; roles: Role[]; gateway: Gateway; close: () => void; update: (updates: Partial<Pick<ScheduledDirective, 'directive' | 'agent_id' | 'interval_seconds' | 'enabled'>>) => Promise<ScheduledDirective>; remove: () => Promise<void> }) {
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [messages, setMessages] = useState<ScheduleChatMessage[]>([{ direction: 'incoming', text: 'Tell me what to change. I can update the instructions, owner, repeat interval, or pause this schedule.' }]);
+  const agent = roles.find(role => role.id === item.agent_id);
+  const nextRun = nextDirectiveRun(item);
+
+  const send = async () => {
+    const text = draft.trim(); if (!text || busy) return;
+    setBusy(true); setMessages(current => [...current, { direction: 'outgoing', text }]);
+    try {
+      const updates: Partial<Pick<ScheduledDirective, 'directive' | 'agent_id' | 'interval_seconds' | 'enabled'>> = {};
+      const duration = parseDuration(text);
+      if (duration) updates.interval_seconds = duration;
+      if (/\b(?:pause|stop|disable)\b/i.test(text)) updates.enabled = false;
+      if (/\b(?:resume|enable|start)\b/i.test(text)) updates.enabled = true;
+      const directiveMatch = text.match(/(?:change|update|replace)\s+(?:the\s+)?(?:directive|instructions?|task)\s+(?:to|with)\s+[“\"]?(.+?)[”\"]?$/i);
+      if (directiveMatch?.[1]) updates.directive = directiveMatch[1].trim();
+      const namedAgent = roles.find(role => new RegExp(`\\b${role.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(text));
+      if (namedAgent && /\b(?:assign|owner|agent|give|move)\b/i.test(text)) updates.agent_id = namedAgent.id;
+      if (!Object.keys(updates).length) throw new Error('Try “run every 6 hours”, “pause this”, “assign this to CEO”, or “change the directive to …”.');
+      const saved = await update(updates);
+      const changes = [updates.directive ? 'instructions' : '', updates.agent_id !== undefined ? 'agent' : '', updates.interval_seconds ? 'repeat interval' : '', updates.enabled !== undefined ? 'status' : ''].filter(Boolean).join(', ');
+      setMessages(current => [...current, { direction: 'incoming', text: `Updated ${changes}. The saved schedule now runs ${intervalLabel(saved.interval_seconds).toLowerCase()}${saved.enabled ? '' : ' and is paused'}.` }]);
+      setDraft('');
+    } catch (error) { setMessages(current => [...current, { direction: 'incoming', text: error instanceof Error ? error.message : 'That change was not saved.' }]); }
+    finally { setBusy(false); }
+  };
+
+  return <div className="page schedule-detail-page">
+    <header className="schedule-detail-header"><button className="button button-quiet" onClick={close}><ChevronLeft size={15} /> All schedules</button><div><button className="button button-quiet" onClick={() => void update({ enabled: !item.enabled })}>{item.enabled ? <Pause size={14} /> : <Play size={14} />}{item.enabled ? 'Pause' : 'Resume'}</button><button className="button button-quiet danger" onClick={() => void remove()}><Trash2 size={14} /> Delete</button></div></header>
+    <section className="schedule-canvas">
+      <div className="schedule-flow-line" aria-hidden="true" />
+      <article className="schedule-node schedule-node-agent"><span className="schedule-node-label">Agent</span><div className="schedule-node-icon">{agent?.initials || 'OL'}</div><div><strong>{agent?.name || 'Profile default'}</strong><small>{agent?.role || 'Uses the profile runtime route'}</small></div><span className={`schedule-node-check ${item.enabled ? 'active' : ''}`}><Check size={13} /></span></article>
+      <article className="schedule-node schedule-node-directive"><span className="schedule-node-label">Recurring directive</span><CalendarClock size={26} /><h1>{item.directive}</h1><div className="schedule-node-pills"><span>{intervalLabel(item.interval_seconds)}</span><span>{item.enabled ? 'Active' : 'Paused'}</span></div></article>
+      <article className="schedule-node schedule-node-next"><span className="schedule-node-label">Next run</span><strong>{item.enabled ? new Intl.DateTimeFormat(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' }).format(nextRun) : 'Paused'}</strong><small>{gateway.status === 'online' ? 'Laptop runtime available' : 'Waiting for laptop runtime'}</small></article>
+      <article className="schedule-node schedule-node-history"><span className="schedule-node-label">Latest evidence</span><strong>{item.last_run_at ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.last_run_at)) : 'Not run yet'}</strong><small>{item.last_error || (item.last_run_id ? `Run ${item.last_run_id.slice(0, 8)}` : 'A run record appears here after execution')}</small></article>
+    </section>
+    <section className="schedule-chat" aria-label="Change this schedule"><div className="schedule-chat-stream">{messages.slice(-4).map((message, index) => <p className={message.direction} key={`${message.direction}-${index}`}>{message.text}</p>)}</div><div className="schedule-chat-composer"><textarea value={draft} onChange={event => setDraft(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void send(); } }} placeholder="Ask to change this schedule" rows={1} /><button onClick={() => void send()} disabled={busy || !draft.trim()} aria-label="Send schedule change">{busy ? <RefreshCw className="spin" size={17} /> : <ArrowRight size={17} />}</button></div></section>
+  </div>;
+}
+
+function SettingsView({ gateway, refresh, configure, job }: { gateway: Gateway; refresh: () => void; configure: () => void; job: () => void }) {
+  const [tab, setTab] = useState('Runtime');
+  const tabs = ['Runtime', 'Bridge', 'Security', 'Appearance'];
+  const { config: rtCfg, save: saveRt, saving: rtSaving, reload: rtReload } = useRuntimeConfig();
+  const [provider, setProvider] = useState('anthropic');
+  const [model, setModel] = useState('claude-opus-4-5');
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState('');
+  const [rtError, setRtError] = useState('');
+  const [rtSuccess, setRtSuccess] = useState(false);
+  const isLocalReady = rtCfg?.ready;
+
+  const PROVIDERS = [
+    { id: 'anthropic', label: 'Anthropic', models: ['claude-opus-4-5', 'claude-sonnet-4-5', 'claude-haiku-4-5-20251001'] },
+    { id: 'openrouter', label: 'OpenRouter (any model)', models: [] },
+    { id: 'other', label: 'Custom endpoint', models: [] },
+  ];
+
+  const submitRuntime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRtError(''); setRtSuccess(false);
+    try {
+      await saveRt(provider, model, apiKey, baseUrl);
+      setRtSuccess(true);
+      setApiKey('');
+      void refresh();
+    } catch (err) { setRtError(err instanceof Error ? err.message : 'Failed to save'); }
+  };
+
+  return <div className="page"><Head title="Settings" copy="Configure the local agent runtime — no external Hermes installation required." />
+    <div className="settings-layout">
+      <nav className="settings-nav">{tabs.map(v => <button key={v} className={tab === v ? 'active' : ''} onClick={() => setTab(v)}>{v}</button>)}</nav>
+      <section className="settings-content">
+        <Panel title={tab} subtitle={tab === 'Runtime' ? 'Local agent runtime — direct API connection' : 'Legacy bridge or advanced config'} />
+
+        {tab === 'Runtime' && <div className="runtime-config-panel">
+          <div className={`runtime-status-badge ${isLocalReady ? 'ready' : ''}`}>
+            <span className="status-dot" /><span>{isLocalReady ? `Local runtime ready · ${rtCfg?.provider} / ${rtCfg?.model}` : 'Runtime not configured — add an API key below'}</span>
+            {isLocalReady && <button className="button button-quiet" onClick={() => void refresh()}>Test</button>}
+          </div>
+          <form className="runtime-config-form" onSubmit={e => void submitRuntime(e)}>
+            <label><span>Provider</span>
+              <select value={provider} onChange={e => setProvider(e.target.value)}>
+                {PROVIDERS.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+              </select>
+            </label>
+            <label><span>Model</span>
+              {PROVIDERS.find(p => p.id === provider)?.models.length ? (
+                <select value={model} onChange={e => setModel(e.target.value)}>
+                  {(PROVIDERS.find(p => p.id === provider)?.models ?? []).map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              ) : (
+                <input value={model} onChange={e => setModel(e.target.value)} placeholder="e.g. anthropic/claude-opus-4-5 or gpt-4o" />
+              )}
+            </label>
+            {(provider === 'openrouter' || provider === 'other') && (
+              <label><span>Base URL</span>
+                <input value={baseUrl} onChange={e => setBaseUrl(e.target.value)} placeholder={provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://your-endpoint/v1'} />
+              </label>
+            )}
+            <label><span>API Key</span>
+              <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={rtCfg?.api_key_set ? '(saved — paste to replace)' : 'sk-ant-... or your provider key'} autoComplete="off" />
+            </label>
+            {rtError && <div className="form-error">{rtError}</div>}
+            {rtSuccess && <div className="form-success">Runtime configured. Agents can now run locally without Hermes.</div>}
+            <button className="button button-primary" type="submit" disabled={rtSaving}>{rtSaving ? 'Saving...' : 'Save and verify'}</button>
+          </form>
+          <div className="runtime-info-box">
+            <Zap size={15} />
+            <div>
+              <strong>Fully local — no Hermes installation required</strong>
+              <p>The API key is stored server-side and never sent to the browser. The agent runs directly on this machine using the configured provider. Tools include bash, file read/write, web fetch, Python execution, persistent memory, and skill creation.</p>
+            </div>
+          </div>
+        </div>}
+
+        {tab === 'Bridge' && <>
+          <Connection icon={Network} title="Legacy Hermes Bridge" detail={gateway.base_url || 'Optional — connect a running Hermes Agent installation as a bridge'} state={statusText(gateway)} action={configure} />
+          <div className="settings-actions"><button className="button button-outline" onClick={refresh}><RefreshCw size={14} /> Recheck bridge</button></div>
+          <div className="runtime-info-box" style={{ marginTop: 18 }}>
+            <Network size={15} />
+            <div><strong>Bridge is optional</strong><p>If you already have Hermes Agent running locally, you can connect it here as a fallback. When a local API key is also configured, the local runtime takes priority.</p></div>
+          </div>
+        </>}
+
+        {tab === 'Security' && <div className="settings-copy"><ShieldCheck size={18} /><h3>Server-side credentials</h3><p>API keys are written to the local server state file, never sent to the browser. Approval gates control what the agent can execute automatically. Disable auto_safe mode to require operator sign-off on every run.</p></div>}
+        {tab === 'Appearance' && <div className="settings-copy"><h3>Quiet command centre</h3><p>The theme follows the project design system and reduced-motion preference.</p></div>}
+      </section>
+    </div>
+  </div>;
+}
 function Connection({ icon: Icon, title, detail, state, action, disabled }: { icon: React.ElementType; title: string; detail: string; state: string; action: () => void; disabled?: boolean }) { return <div className="connection-row"><span className="source-icon"><Icon size={16} /></span><div><strong>{title}</strong><small>{detail}</small></div><span className="connection-status"><span className="status-dot idle" /> {state}</span><button className="button button-outline" onClick={action} disabled={disabled}>Configure</button></div>; }
 
 function AgentPanel({ profileId, gateway, events, close }: { profileId: string; gateway: Gateway; events: Event[]; close: () => void }) {

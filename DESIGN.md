@@ -1,94 +1,79 @@
 ---
-name: OrbityLabs Orbital Archive
-description: An editorial marketing world paired with a quiet professional operator workspace.
+name: OrbityLabs Midnight Operations
+description: A dark editorial command system with copper punctuation and emerald verified automation.
 colors:
-  paper: "#efe0bb"
-  paper-light: "#f7ebcb"
-  ink: "#17201d"
-  orange: "#ce5526"
-  ochre: "#d89735"
-  brass: "#9b722e"
-  muted: "#6f674f"
-  verified: "#74b97a"
-  blocked: "#dc6b50"
-  operator-canvas: "#f6f7f9"
-  operator-surface: "#ffffff"
-  operator-ink: "#17191d"
-  operator-accent: "#5653d8"
+  void: "#08080a"
+  onyx: "#040406"
+  carbon: "#111216"
+  raised: "#17181d"
+  line: "#27282e"
+  text: "#e2e3e9"
+  muted: "#9194a1"
+  copper: "#cc9166"
+  verified: "#54f078"
 typography:
-  display: "Bodoni Moda, Georgia, serif"
-  interface: "DM Sans, system-ui, sans-serif"
-  metadata: "JetBrains Mono, ui-monospace, monospace"
+  display: "Playfair Display, Georgia, serif"
+  interface: "-apple-system, BlinkMacSystemFont, SF Pro Text, sans-serif"
 rounded:
-  interface: "0-6px"
-  status: "9999px"
+  compact: "10px"
+  controls-small: "12px"
+  panels: "14px"
+  canvas: "16px"
+  controls: "9999px"
 ---
 
-# Design System: OrbityLabs Orbital Archive
+# Design System: OrbityLabs Midnight Operations
 
 ## North star
 
-**Orbital Archive** imagines the autonomous organisation as a hand-drawn future institution: part observatory, part archive, part transit system. Warm fibrous paper, carbon ink, oxidised orange, astronomical geometry, and architectural illustration give the product a tactile cultural home without making the operational interface harder to use.
+OrbityLabs should feel like a calm operations room on a MacBook at night: deep black surfaces, exact hairline structure, editorial type for consequential ideas, and compact interface text for work. The system is quiet until automation becomes active. Then restrained emerald connections make the work visible without turning the product into a generic cyberpunk dashboard.
 
-The product deliberately has two visual registers. Marketing uses full illustration, editorial scale, and cinematic sequence. The command centre is a quiet professional workspace where product state, navigation, conversation, and operator actions remain immediately legible. The paired mobile companion remains a focused messaging and pairing surface.
+The landing page and command centre share one visual world. Marketing uses the same dark surfaces at a cinematic scale, with the existing generated Orbital Archive artwork darkened and desaturated so product copy and controls remain primary. The application uses that world at operational density.
 
-## Image system
+## Color roles
 
-All flagship artwork is original GPT Images output saved under `public/assets/orbital-archive/`. It must not contain interface text, commercial claims, logos, or synthetic runtime data. Live HTML carries every product statement and interaction.
-
-- `hero-metropolis.jpg`: the autonomous organisation as a connected future metropolis.
-- `orchestration-tower.jpg`: the CEO and agent system as an architectural cross-section.
-- `agent-triptych.jpg`: strategy, systems, and research as three editorial portraits.
-- `profile-atlas.jpg`: isolated profile worlds connected through an overview observatory.
-- `paper-texture.jpg`: the shared material substrate.
-
-Images use fibrous paper, ink bleed, risograph grain, technical construction lines, solar discs, ivory, ochre, carbon, and vermilion. They avoid cyberpunk neon, generic neural-network graphics, photorealism, copied cities, and embedded text.
+- `#08080a` is the page canvas.
+- `#040406` is the deepest card and contained-work surface.
+- `#111216` and `#17181d` create neighboring panel levels.
+- `#27282e` and `#383a43` are the structural borders.
+- `#e2e3e9` is normal readable copy; white is reserved for headings and critical emphasis.
+- Copper `#cc9166` is the editorial accent: brand mark, selected icon, links, and category punctuation.
+- Emerald `#54f078` is not a general brand color. It means active, verified automation and appears in status dots, workflow connectors, and active schedule nodes.
 
 ## Typography
 
-Bodoni Moda is the editorial display voice and belongs to marketing. DM Sans or Inter carries the command centre, interface copy, controls, and page titles. JetBrains Mono remains limited to commands, identifiers, timestamps, and measured machine state.
+Playfair Display is reserved for headings at 28px and above, important directives, and major schedule times. The Mac system face handles navigation, controls, form fields, body copy, status, and metadata. Monospace remains limited to actual identifiers, commands, model names, and timestamps.
 
-- Hero display: 64–118px, regular, line-height .86–.94, tracking no tighter than -0.04em.
-- Section display: 44–88px, regular, line-height .92–1.02.
-- Body: 14–18px with 1.55–1.65 line-height and a 65–75 character measure.
-- Interface: 10–13px, medium when an action needs emphasis.
+- Display: 44–94px, regular, .9–1.08 line-height.
+- Page title: 34–56px, regular serif.
+- Interface title: 15–22px, 500–600 sans.
+- Body: 12–16px, 1.5–1.65 line-height.
+- Metadata: 9–11px, compact and explicit.
 
-## Layout and sequence
+## Scheduled work
 
-The landing page reads like a long-form exhibition publication:
+The Schedule page is profile-scoped and uses the real laptop scheduler. Each list item exposes its directive, owning agent, repeat interval, enabled state, and computed next run. Clicking a schedule opens a dotted workflow canvas whose nodes show agent ownership, the recurring directive, next run, and latest recorded evidence.
 
-1. An illustrated metropolis and live product thesis.
-2. The real product interface framed as operational evidence.
-3. CEO orchestration shown as architecture.
-4. A three-part specialist portrait sequence.
-5. A profile atlas demonstrating context isolation.
-6. Human authority on a committed vermilion field.
-7. A direct desktop call to action.
+The bottom schedule chat is a real mutation surface, not a simulated assistant. It can change the repeat interval, assigned agent, directive text, or enabled state and only confirms a change after the profile API saves it. If the laptop runtime is unavailable, schedules remain visible and editable but explicitly state that execution is waiting.
 
-Sections meet at hard editorial seams. Panels use rules and material contrast rather than generic floating cards. Illustration crops remain art-directed at every breakpoint.
+## Surface rules
 
-## Operational adaptation
-
-The application is the **Operator Workspace**, not a reduced version of the landing page.
-
-- Use a warm-neutral `#f6f7f9` canvas, white work surfaces, dark ink, and indigo `#5653d8` for primary actions and selected routes.
-- Keep the sidebar compact. Eight frequent routes stay visible; secondary controls live behind a real More tools menu. The desktop rail collapses to icons and remains a drawer on small screens.
-- Use 30px page titles, 12–13px body copy, and 9–11px metadata. Every operational heading uses the interface typeface.
-- Working surfaces use 12–14px radii, quiet one-pixel rules, and low-elevation shadows. Avoid giant decorative empty states.
-- Empty states explain what is missing and expose a real next action. Profile creation happens directly on the Profiles page.
-- The global assistant is a contained conversation canvas with runtime state, scoped profile context, a centred first-use state, and a fixed composer.
-- No generated artwork, archival texture, display serif, or marketing ornament appears inside the application.
-- Green means observed or verified. Red means actually blocked. Unknown and unconfigured states remain neutral.
+- Use one-pixel borders and neighboring dark tones before shadows.
+- Cards use 14px radii; buttons, small status controls, and inputs may use full pills.
+- The dotted background is reserved for the schedule workflow canvas because it is an actual node surface.
+- The workflow canvas may use restrained glow to describe an active connection. Do not apply glow globally.
+- Use only one white filled primary action per working region.
+- Keep empty, loading, paused, offline, error, and verified states visibly distinct and truthful.
+- Existing generated artwork remains metaphor, never proof of runtime state.
+- Mobile remains a focused laptop-pairing and CEO messaging surface, not a miniature desktop dashboard.
 
 ## Motion
 
-The authored moment is the hero image revealing from the right as its city slowly breathes forward. Supporting illustrations gain a restrained scale response on hover. The archive seal rotates slowly. Every effect is removed for reduced-motion users.
+Cards lift by a few pixels with an exponential ease-out. Workflow nodes keep their authored angle and rise on hover. The active connection may glow softly. All motion is removed under `prefers-reduced-motion`; no interaction depends on animation.
 
-## Rules
+## Product truth
 
-- Keep live text out of generated images.
-- Do not fabricate agents, activity, metrics, integrations, or run success to fill the composition.
-- Use illustration as product metaphor, never as evidence of a connected runtime.
-- Preserve obvious keyboard focus, readable contrast, themed selection, scrollbars, disabled states, and truthful empty states.
-- Do not introduce neon, glassmorphism, generic AI gradients, dashboard metric-card grids, or decorative terminal streams.
-- Do not flatten the paired phone experience into a miniature desktop command centre.
+- Never claim a schedule ran without a stored run or error record.
+- Never claim an agent owns a schedule unless its stored `agent_id` matches a real profile agent.
+- Never show external integrations, models, or credentials as configured without verified backend state.
+- Never use generated activity, fake metrics, placeholder accounts, or pretend chat replies to fill the interface.
