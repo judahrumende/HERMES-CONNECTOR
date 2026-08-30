@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-08-25T11:50:00+08:00",
-  "title": "Design System: Hermes Jarvis",
+  "title": "Design System: OrbityLabs Ground Track",
   "extensions": {
     "colorMeta": {
       "void": { "role": "neutral", "displayName": "Void", "canonical": "#08090a", "tonalRamp": ["#08090a", "#151719", "#25282b", "#3b3f44", "#5b6067", "#858b94", "#bec3ca", "#f1f2f3"] },
@@ -79,16 +79,16 @@
     }
   ],
   "narrative": {
-    "northStar": "The Quiet Command Centre",
-    "overview": "Hermes Jarvis uses a Linear-inspired operational world: dark, dense, precise, and calm. Hierarchy comes from tonal surfaces, hairline divisions, compact data rows, layered inspectors, and disciplined typography rather than decorative effects.",
-    "keyCharacteristics": ["Near-black layered surfaces with one rare acid-lime action.", "Compact, information-rich controls and restrained 12px containers.", "Inter Variable for interface hierarchy; mono only for technical metadata.", "Explicit offline, unconfigured, empty, and local-only states."],
+    "northStar": "Ground Track",
+    "overview": "OrbityLabs uses a route-based command surface for evidence-led AI operations. Hierarchy comes from graphite planes, route stages, hairline divisions, an evidence rail, and deliberate operational typography rather than dashboard-card repetition.",
+    "keyCharacteristics": ["A profile-scoped route from runtime to leadership to observed activity.", "Near-black graphite planes with concise white primary actions.", "Inter for interface hierarchy and mono only for machine metadata.", "Explicit verified, unavailable, empty, and local-only states."],
     "rules": [
-      { "name": "The One Signal Rule", "body": "Use only one acid-lime filled action per screen; all other actions remain neutral.", "section": "colors" },
+      { "name": "The One Signal Rule", "body": "Use one light filled operator action per screen; all other controls remain graphite.", "section": "colors" },
       { "name": "The Truthful State Rule", "body": "Operational status colors describe verified state only. Unconfigured systems remain neutral and explicitly labeled.", "section": "colors" },
-      { "name": "The No Bold Rule", "body": "Inter uses only weights 300, 400, 510, and 590; never 700 or heavier.", "section": "typography" },
+      { "name": "The Route Rule", "body": "Use visible stages to orient a profile around runtime truth, leadership, and observed activity.", "section": "layout" },
       { "name": "The Tonal Depth Rule", "body": "Establish hierarchy with neighboring surface tones and one-pixel borders before adding any shadow.", "section": "elevation" }
     ],
-    "dos": ["Do use the semantic color aliases so dark and light modes preserve the same hierarchy.", "Do render product UI as the landing page's proof of capability.", "Do keep disconnected systems visibly offline, unconfigured, or local-only.", "Do use Lucide line icons at a consistent 12-17px scale in dense controls."],
-    "donts": ["Don't add another chromatic filled call to action to a screen.", "Don't use gradients outside the single atmospheric hero floor.", "Don't use drop shadows, stock imagery, decorative mono, or radii above 12px.", "Don't turn status colors into large solid badges or fabricate live agent activity."]
+    "dos": ["Do show real route stages and evidence rather than synthetic metrics.", "Do render product UI as the landing page's proof of capability.", "Do keep disconnected systems visibly offline, unconfigured, or local-only.", "Do use Lucide line icons at a consistent 12-17px scale in dense controls."],
+    "donts": ["Don't repeat dashboard metric cards when a route or evidence list is clearer.", "Don't use decorative grids, fake terminals, or ambient activity streams.", "Don't use heavy shadows, stock imagery, decorative mono, or radii above 6px in app surfaces.", "Don't turn status colors into large solid badges or fabricate live agent activity."]
   }
 }
