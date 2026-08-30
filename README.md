@@ -60,6 +60,16 @@ Enabled agent loops are scheduled by the desktop bridge while it is running. A C
 
 The paired mobile companion is a remote CEO chat client. Pair it from the laptop’s QR code or eight-character fallback code; it receives the profile/agent manifest without provider keys, vault paths, or desktop controls. Its source lives in [Hermes-connector-mobile](https://github.com/judahrumende/Hermes-connector-mobile).
 
+## Skill routing and operations monitor
+
+The **Skills** workspace is profile-scoped. When an operator message or a continuous agent loop starts, OrbityLabs performs a transparent local relevance match against that profile's registered skill sources and passes the matching source references to Hermes. A source is not automatically downloaded, executed, granted permissions, or treated as a configured capability.
+
+The Skills API can also search public GitHub repositories. Results are deliberately returned as **source-only** candidates: review their code, permissions, credentials, and licensing before registering or using one. The skill-draft endpoint asks the verified runtime for a reviewable specification and records the request; it does not install or execute a generated skill.
+
+The **Operations** tab reports actual loop scheduling, run IDs, errors, and recorded events from the local bridge. It is not a desktop screen recorder or a claim that agents have visual control of the laptop.
+
+The mobile companion's focused remote UI requires a platform-provided QR scanner and secure-storage adapter. It intentionally does not fall back to browser local storage for pairing credentials.
+
 ## Autonomy and model configuration
 
 OrbityLabs supports a profile-scoped `auto-safe` policy for routine, reversible work. It does not bypass confirmation for external messages, account or credential creation, payments, deletion, publishing, or security changes. The configuration CLI writes to the private OrbityLabs application-support directory:

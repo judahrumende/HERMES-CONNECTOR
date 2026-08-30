@@ -14,12 +14,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
-from urllib.request import Request, urlopen
+from urllib.parse import urlencode, urlparse
+from urllib.request import Request as UrlRequest, urlopen
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -154,6 +154,15 @@ class CEOMessage(BaseModel):
     message: str = Field(min_length=1, max_length=30_000)
 
 
+class SkillDraftInput(BaseModel):
+    agent_id: str = Field(min_length=1, max_length=200)
+    request: str = Field(min_length=8, max_length=12_000)
+
+
+class SkillSearchInput(BaseModel):
+    query: str = Field(min_length=3, max_length=240)
+
+
 class ManualPairingCompletion(BaseModel):
     code: str = Field(min_length=8, max_length=32)
     device_name: str = Field(default="Phone", min_length=1, max_length=80)
@@ -180,6 +189,40 @@ class SkillInput(BaseModel):
         return value.strip()
 
 
+class MessageInput(BaseModel):
+    agent_id: str = Field(default="", max_length=200)
+    direction: str = Field(pattern="^(outgoing|incoming)$")
+    text: str = Field(min_length=1, max_length=30_000)
+    run_id: str = Field(default="", max_length=200)
+
+
+class ApprovalInput(BaseModel):
+    agent_id: str = Field(default="", max_length=200)
+    session_id: str = Field(default="", max_length=400)
+    kind: str = Field(default="run", max_length=80)
+    summary: str = Field(min_length=1, max_length=2000)
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ApprovalDecision(BaseModel):
+    state: str = Field(pattern="^(approved|denied)$")
+
+
+class ToolEventInput(BaseModel):
+    run_id: str = Field(default="", max_length=200)
+    agent_id: str = Field(default="", max_length=200)
+    tool_name: str = Field(min_length=1, max_length=200)
+    input: dict[str, Any] = Field(default_factory=dict)
+    output: dict[str, Any] = Field(default_factory=dict)
+    status: str = Field(default="ok", max_length=40)
+    duration_ms: int = Field(default=0, ge=0)
+
+
+class SkillInstallInput(BaseModel):
+    version: str = Field(default="", max_length=200)
+    sha: str = Field(default="", max_length=200)
+
+
 class TaskInput(BaseModel):
     title: str = Field(min_length=1, max_length=400)
     area: str = Field(default="General", max_length=200)
@@ -203,6 +246,29 @@ class ModelRouteInput(BaseModel):
     agent_id: str = Field(default="", max_length=200)
     provider: str = Field(default="", max_length=200)
     model: str = Field(default="", max_length=200)
+
+
+class ScheduledDirectiveInput(BaseModel):
+    agent_id: str = Field(default="", max_length=200)
+    directive: str = Field(..., min_length=1, max_length=8000)
+    interval_seconds: int = Field(default=3600, ge=60, le=604800)
+
+
+class ScheduledDirectiveUpdate(BaseModel):
+    agent_id: str | None = None
+    directive: str | None = Field(default=None, min_length=1, max_length=8000)
+    interval_seconds: int | None = Field(default=None, ge=60, le=604800)
+    enabled: bool | None = None
+
+
+class GroupRunInput(BaseModel):
+    agent_ids: list[str] = Field(..., min_length=1, max_length=20)
+    directive: str = Field(..., min_length=1, max_length=8000)
+
+
+class WebhookPayload(BaseModel):
+    summary: str = Field(default="Incoming webhook", max_length=500)
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 def local_address() -> str | None:
@@ -305,7 +371,7 @@ def verify_composio_key() -> dict[str, Any]:
     key = os.getenv("COMPOSIO_API_KEY", "").strip()
     if not key:
         return {**composio_snapshot(), "detail": "COMPOSIO_API_KEY is not configured in the desktop server environment."}
-    request = Request(
+    request = UrlRequest(
         "https://backend.composio.dev/api/v3.1/tools?limit=1",
         headers={"x-api-key": key, "Accept": "application/json"},
         method="GET",
@@ -352,6 +418,39 @@ def paired_device_or_403(secret: str | None) -> None:
     digest = hashlib.sha256(secret.encode("utf-8")).hexdigest()
     if not app.state.store.verify_paired_device(digest):
         raise HTTPException(401, "Mobile device is not paired or its access key has been revoked")
+
+
+def skill_summary(profile_id: str, request: str) -> str:
+    matches = app.state.store.match_skills(profile_id, request)
+    if not matches:
+        return "No registered profile skill source matched this request. Do not assume an unregistered capability exists."
+    lines = [f"- {skill['name']}: {skill['repository']} — {skill['description']}" for skill in matches]
+    return "Relevant registered skill sources (source-only; do not execute unreviewed code):\n" + "\n".join(lines)
+
+
+def github_skill_search(query: str) -> list[dict[str, str]]:
+    """Search public GitHub repositories as reviewable skill sources, without cloning or executing them."""
+    encoded = urlencode({"q": f"{query} skill", "sort": "stars", "order": "desc", "per_page": "8"})
+    request = UrlRequest(
+        f"https://api.github.com/search/repositories?{encoded}",
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "OrbityLabs"},
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            body = json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        if exc.code == 403:
+            raise HTTPException(429, "GitHub search is temporarily rate-limited. Try again later.") from exc
+        raise HTTPException(502, f"GitHub search failed (HTTP {exc.code}).") from exc
+    except (URLError, OSError, TimeoutError, ValueError) as exc:
+        raise HTTPException(502, "Could not reach GitHub to search skill sources.") from exc
+    results: list[dict[str, str]] = []
+    for item in body.get("items", []) if isinstance(body, dict) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("html_url"), str):
+            continue
+        results.append({"name": str(item.get("full_name") or item["html_url"]), "repository": item["html_url"], "description": str(item.get("description") or "No repository description provided."), "state": "source_only"})
+    return results
 
 
 @asynccontextmanager
@@ -411,6 +510,14 @@ async def refresh() -> dict[str, Any]:
 async def run(value: PayloadInput) -> dict[str, Any]:
     try:
         return await app.state.hermes.run(value.payload)
+    except HermesError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.delete("/api/hermes/runs/{run_id}")
+async def stop_run(run_id: str) -> dict[str, Any]:
+    try:
+        return await app.state.hermes.stop_run(run_id)
     except HermesError as exc:
         raise HTTPException(502, str(exc)) from exc
 
@@ -492,6 +599,28 @@ async def create_agent(profile_id: str, value: AgentInput) -> dict[str, Any]:
         raise HTTPException(404, "Profile not found") from exc
 
 
+@app.get("/api/profiles/{profile_id}/agents/{agent_id}/notes")
+async def get_agent_notes(profile_id: str, agent_id: str) -> dict[str, Any]:
+    try:
+        notes = app.state.store.get_agent_notes(profile_id, agent_id)
+        return {"notes": notes}
+    except ProfileNotFound as exc:
+        raise HTTPException(404, str(exc))
+
+
+class AgentNotesInput(BaseModel):
+    notes: str = Field(default="", max_length=10000)
+
+
+@app.put("/api/profiles/{profile_id}/agents/{agent_id}/notes")
+async def set_agent_notes(profile_id: str, agent_id: str, value: AgentNotesInput) -> dict[str, Any]:
+    try:
+        app.state.store.set_agent_notes(profile_id, agent_id, value.notes)
+        return {"notes": value.notes}
+    except ProfileNotFound as exc:
+        raise HTTPException(404, str(exc))
+
+
 @app.post("/api/profiles/{profile_id}/agents/{agent_id}/artifacts")
 async def write_agent_artifact(profile_id: str, agent_id: str, value: ArtifactInput) -> dict[str, Any]:
     """Write a real artifact to the selected agent folder and optional profile vault mirror."""
@@ -524,7 +653,7 @@ async def message_ceo(profile_id: str, value: CEOMessage) -> dict[str, Any]:
     ceo = find_ceo(profile_id)
     try:
         result = await app.state.hermes.run({
-            "input": value.message,
+            "input": f"Operator message: {value.message}\n\n{skill_summary(profile_id, value.message)}\n\nSelect only relevant registered skills before acting. A source is not permission to execute code or claim a capability.",
             "session_id": f"orbitylabs:{profile_id}:{ceo['id']}:ceo",
             "metadata": {"profile_id": profile_id, "agent_id": ceo["id"], "role": "ceo", "entrypoint": "operator_chat"},
         })
@@ -542,12 +671,67 @@ async def list_skills(profile_id: str) -> list[dict[str, Any]]:
         raise HTTPException(404, "Profile not found") from exc
 
 
+@app.post("/api/profiles/{profile_id}/skills/search")
+async def search_skills(profile_id: str, value: SkillSearchInput) -> dict[str, Any]:
+    try:
+        local = app.state.store.match_skills(profile_id, value.query)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    external = await asyncio.to_thread(github_skill_search, value.query)
+    return {"query": value.query, "registered_matches": local, "github_candidates": external, "notice": "GitHub candidates are source-only. Review code, permissions, and credentials before registering or using any source."}
+
+
+@app.post("/api/profiles/{profile_id}/skill-drafts")
+async def request_skill_draft(profile_id: str, value: SkillDraftInput) -> dict[str, Any]:
+    try:
+        agent = next(item for item in app.state.store.list_agents(profile_id) if item["id"] == value.agent_id)
+    except StopIteration as exc:
+        raise HTTPException(404, "Agent not found") from exc
+    try:
+        result = await app.state.hermes.run({
+            "input": f"Design a reviewable OrbityLabs skill specification for this agent request: {value.request}\n\n{skill_summary(profile_id, value.request)}\n\nReturn the skill name, purpose, inputs, outputs, required tools/configuration, security boundary, and verification plan. Do not claim it is installed, executable, or permitted.",
+            "session_id": f"orbitylabs:{profile_id}:{agent['id']}:skill-draft",
+            "metadata": {"profile_id": profile_id, "agent_id": agent["id"], "mode": "skill_draft"},
+        })
+    except HermesError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    draft = app.state.store.create_skill_draft(profile_id, agent["id"], value.request, str(result.get("run_id") or result.get("id") or ""))
+    return {"draft": draft, "run": result}
+
+
+@app.get("/api/profiles/{profile_id}/operations")
+async def profile_operations(profile_id: str) -> dict[str, Any]:
+    try:
+        return {"loops": app.state.store.list_agent_loops(profile_id), "events": app.state.store.list_events(profile_id, 40)}
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
 @app.post("/api/profiles/{profile_id}/skills")
 async def create_skill(profile_id: str, value: SkillInput) -> dict[str, Any]:
     try:
         return app.state.store.create_skill(profile_id, str(uuid.uuid4()), value.name, value.repository, value.description)
     except ProfileNotFound as exc:
         raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/skills/{skill_id}/install")
+async def install_skill(profile_id: str, skill_id: str, value: SkillInstallInput) -> dict[str, Any]:
+    try:
+        return app.state.store.install_skill(profile_id, skill_id, value.version, value.sha)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "Skill not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/skills/{skill_id}/uninstall")
+async def uninstall_skill(profile_id: str, skill_id: str) -> dict[str, str]:
+    try:
+        app.state.store.uninstall_skill(profile_id, skill_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    return {"status": "uninstalled"}
 
 
 @app.get("/api/profiles/{profile_id}/agent-skills")
@@ -652,6 +836,160 @@ async def list_events(profile_id: str, limit: int = 100) -> list[dict[str, Any]]
         raise HTTPException(404, "Profile not found") from exc
 
 
+@app.get("/api/profiles/{profile_id}/messages")
+async def list_messages(profile_id: str, agent_id: str = "", limit: int = 200) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_messages(profile_id, agent_id, min(max(limit, 1), 500))
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/messages")
+async def save_message(profile_id: str, value: MessageInput) -> dict[str, Any]:
+    try:
+        return app.state.store.save_message(profile_id, str(uuid.uuid4()), value.agent_id, value.direction, value.text, value.run_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/messages/search")
+async def search_messages(profile_id: str, q: str = "", limit: int = 50) -> list[dict[str, Any]]:
+    if not q.strip():
+        return []
+    try:
+        return app.state.store.search_messages(profile_id, q.strip(), min(max(limit, 1), 200))
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/message-previews")
+async def message_previews(profile_id: str) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.message_previews(profile_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/approvals")
+async def list_approvals(profile_id: str, state: str = "") -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_approvals(profile_id, state or None)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/approvals")
+async def create_approval(profile_id: str, value: ApprovalInput) -> dict[str, Any]:
+    try:
+        return app.state.store.create_approval(profile_id, str(uuid.uuid4()), value.agent_id, value.session_id, value.kind, value.summary, value.payload)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.patch("/api/profiles/{profile_id}/approvals/{approval_id}")
+async def decide_approval(profile_id: str, approval_id: str, value: ApprovalDecision) -> dict[str, Any]:
+    """Approve or deny. Approving 'run' kind approvals immediately fires the Hermes run."""
+    try:
+        approval = app.state.store.get_approval(profile_id, approval_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    except LookupError as exc:
+        raise HTTPException(404, "Approval not found") from exc
+    if approval["state"] != "pending":
+        raise HTTPException(409, f"Approval is already {approval['state']}")
+
+    run_id = ""
+    if value.state == "approved" and approval.get("kind") == "run":
+        payload = approval.get("payload") or {}
+        if isinstance(payload, dict) and payload.get("input"):
+            try:
+                result = await app.state.hermes.run(payload)
+                run_id = str(result.get("run_id") or result.get("id") or "")
+                app.state.store.record_event(profile_id, "approval.run_started", {"approval_id": approval_id, "run_id": run_id})
+            except HermesError as exc:
+                raise HTTPException(502, f"Approval granted but Hermes run failed: {exc}") from exc
+
+    try:
+        return app.state.store.decide_approval(profile_id, approval_id, value.state, run_id)
+    except LookupError as exc:
+        raise HTTPException(404, "Approval not found") from exc
+
+
+@app.get("/api/profiles/{profile_id}/tool-events")
+async def list_tool_events(profile_id: str, limit: int = 50, run_id: str = "") -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_tool_events(profile_id, min(max(limit, 1), 200), run_id)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+
+
+@app.post("/api/profiles/{profile_id}/tool-events")
+async def record_tool_event(profile_id: str, value: ToolEventInput) -> dict[str, str]:
+    try:
+        app.state.store.record_tool_event(profile_id, value.run_id, value.agent_id, value.tool_name, value.input, value.output, value.status, value.duration_ms)
+    except ProfileNotFound as exc:
+        raise HTTPException(404, "Profile not found") from exc
+    return {"status": "recorded"}
+
+
+@app.get("/api/doctor")
+async def doctor() -> dict[str, Any]:
+    """Comprehensive health check for the OrbityLabs doctor view."""
+    checks: list[dict[str, Any]] = []
+
+    checks.append({
+        "name": "Bridge process",
+        "status": "ok",
+        "detail": "This bridge server is responding.",
+    })
+
+    gateway = app.state.hermes.snapshot
+    checks.append({
+        "name": "Hermes gateway",
+        "status": "ok" if gateway.get("status") == "online" else "error" if gateway.get("status") == "offline" else "warning",
+        "detail": gateway.get("error") or (gateway.get("base_url") or "Not configured") + (" — verified online" if gateway.get("status") == "online" else ""),
+    })
+
+    cfg = config_file()
+    checks.append({
+        "name": "Config file",
+        "status": "ok" if cfg.exists() else "warning",
+        "detail": str(cfg) + (" (found)" if cfg.exists() else " (not found — create it to persist credentials)"),
+    })
+
+    try:
+        stats = app.state.store.db_stats()
+        checks.append({
+            "name": "Local database",
+            "status": "ok",
+            "detail": f"{stats.get('profiles', 0)} profiles · {stats.get('agents', 0)} agents · {stats.get('messages', 0)} messages · {stats.get('approvals', 0)} approvals",
+        })
+    except Exception as exc:
+        checks.append({"name": "Local database", "status": "error", "detail": str(exc)})
+
+    loop_candidates = app.state.store.agent_loop_candidates()
+    errored = [l for l in loop_candidates if l.get("last_error")]
+    checks.append({
+        "name": "Agent loops",
+        "status": "error" if errored else "ok",
+        "detail": f"{len(loop_candidates)} loop(s) configured" + (f" · {len(errored)} with errors: " + "; ".join(l['agent_id'] for l in errored) if errored else ""),
+    })
+
+    api_key_set = bool(os.getenv("HERMES_API_KEY", "").strip())
+    checks.append({
+        "name": "HERMES_API_KEY",
+        "status": "ok" if api_key_set else "warning",
+        "detail": "Set in server environment" if api_key_set else "Not set — add it to the OrbityLabs .env file",
+    })
+
+    return {
+        "checks": checks,
+        "gateway": gateway,
+        "config_file": str(cfg),
+        "db_stats": app.state.store.db_stats(),
+    }
+
+
 @app.get("/api/global/context")
 async def global_context() -> list[dict[str, Any]]:
     """Federated view across every profile. Each item carries its own profile_id and name for provenance."""
@@ -714,6 +1052,156 @@ async def mobile_manifest(x_orbity_device_secret: str | None = Header(default=No
 async def mobile_message_ceo(value: CEOMessage, profile_id: str, x_orbity_device_secret: str | None = Header(default=None)) -> dict[str, Any]:
     paired_device_or_403(x_orbity_device_secret)
     return await message_ceo(profile_id, value)
+
+
+# -- run timeline -----------------------------------------------------------------
+
+@app.get("/api/profiles/{profile_id}/runs")
+async def list_runs(profile_id: str, limit: int = 50) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_runs(profile_id, min(200, limit))
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+
+
+# -- scheduled directives ---------------------------------------------------------
+
+@app.get("/api/profiles/{profile_id}/scheduled-directives")
+async def list_scheduled_directives(profile_id: str) -> list[dict[str, Any]]:
+    try:
+        return app.state.store.list_scheduled_directives(profile_id)
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+
+
+@app.post("/api/profiles/{profile_id}/scheduled-directives")
+async def create_scheduled_directive(profile_id: str, value: ScheduledDirectiveInput) -> dict[str, Any]:
+    try:
+        return app.state.store.create_scheduled_directive(profile_id, value.agent_id, value.directive, value.interval_seconds)
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+
+
+@app.patch("/api/profiles/{profile_id}/scheduled-directives/{directive_id}")
+async def update_scheduled_directive(profile_id: str, directive_id: str, value: ScheduledDirectiveUpdate) -> dict[str, Any]:
+    updates = {k: v for k, v in value.model_dump(exclude_none=True).items()}
+    result = app.state.store.update_scheduled_directive(profile_id, directive_id, **updates)
+    if result is None:
+        raise HTTPException(404, "Directive not found")
+    return result
+
+
+@app.delete("/api/profiles/{profile_id}/scheduled-directives/{directive_id}", status_code=204)
+async def delete_scheduled_directive(profile_id: str, directive_id: str) -> None:
+    app.state.store.delete_scheduled_directive(profile_id, directive_id)
+
+
+# -- group run (fan-out to multiple agents) ----------------------------------------
+
+@app.post("/api/profiles/{profile_id}/group-run")
+async def group_run(profile_id: str, value: GroupRunInput) -> dict[str, Any]:
+    try:
+        app.state.store.get_profile(profile_id)
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+    if app.state.hermes.snapshot.get("status") != "online":
+        raise HTTPException(503, "Hermes runtime is not online")
+    results: list[dict[str, Any]] = []
+    for agent_id in value.agent_ids[:20]:
+        try:
+            result = await app.state.hermes.run({
+                "input": value.directive,
+                "session_id": f"orbitylabs:{profile_id}:{agent_id}:group",
+                "metadata": {"profile_id": profile_id, "agent_id": agent_id, "mode": "group_run"},
+            })
+            run_id = str(result.get("run_id") or result.get("id") or "")
+            if run_id:
+                app.state.store.save_run(run_id, profile_id, agent_id, f"orbitylabs:{profile_id}:{agent_id}:group", value.directive[:200])
+            results.append({"agent_id": agent_id, "run_id": run_id, "status": "started"})
+        except HermesError as exc:
+            results.append({"agent_id": agent_id, "error": str(exc), "status": "failed"})
+    return {"runs": results}
+
+
+# -- profile export / import -------------------------------------------------------
+
+@app.get("/api/profiles/{profile_id}/export")
+async def export_profile(profile_id: str) -> StreamingResponse:
+    try:
+        data = app.state.store.export_profile(profile_id)
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+    filename = f"profile-{profile_id[:8]}.json"
+    return StreamingResponse(
+        iter([json.dumps(data, indent=2)]),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/profiles/import")
+async def import_profile_endpoint(request: Request) -> dict[str, Any]:
+    from fastapi import Request as Req
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Request body must be valid JSON")
+    try:
+        return app.state.store.import_profile(body)
+    except Exception as exc:
+        raise HTTPException(400, f"Import failed: {exc}")
+
+
+# -- vault diff --------------------------------------------------------------------
+
+@app.get("/api/profiles/{profile_id}/vault-diff")
+async def vault_diff(profile_id: str, since: str | None = None) -> list[dict[str, Any]]:
+    try:
+        profile = app.state.store.get_profile(profile_id)
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+    vault_path = profile.get("vault_path", "")
+    if not vault_path:
+        raise HTTPException(422, "This profile has no vault path configured")
+    return app.state.store.vault_diff(vault_path, since)
+
+
+# -- approval audit export ---------------------------------------------------------
+
+@app.get("/api/profiles/{profile_id}/approvals/export")
+async def export_approvals(profile_id: str, fmt: str = "json") -> StreamingResponse:
+    try:
+        approvals = app.state.store.list_approvals(profile_id)
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+    if fmt == "csv":
+        import csv, io
+        output = io.StringIO()
+        fields = ["id", "agent_id", "kind", "summary", "state", "decided_at", "run_id", "created_at"]
+        writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(approvals)
+        return StreamingResponse(iter([output.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=approvals.csv"})
+    return StreamingResponse(iter([json.dumps(approvals, indent=2)]), media_type="application/json", headers={"Content-Disposition": "attachment; filename=approvals.json"})
+
+
+# -- webhook receiver --------------------------------------------------------------
+
+@app.post("/api/webhooks/{profile_id}")
+async def receive_webhook(profile_id: str, value: WebhookPayload) -> dict[str, Any]:
+    try:
+        approval = app.state.store.create_approval(
+            profile_id,
+            agent_id="",
+            session_id="",
+            kind="webhook",
+            summary=value.summary[:500],
+            payload=value.payload,
+        )
+    except ProfileNotFound:
+        raise HTTPException(404, "Profile not found")
+    await app.state.hub.publish("approval.created", {"profile_id": profile_id, "approval_id": approval["id"], "kind": "webhook"})
+    return {"received": True, "approval_id": approval["id"]}
 
 
 @app.websocket("/ws/live")

@@ -60,6 +60,10 @@ class HermesClient:
             raise HermesError("Hermes returned an invalid job response.")
         return value
 
+    async def stop_run(self, run_id: str) -> dict[str, Any]:
+        value = await self.request("DELETE", f"/v1/runs/{run_id}")
+        return value if isinstance(value, dict) else {"run_id": run_id, "status": "stop_requested"}
+
     async def stream_events(self, run_id: str) -> AsyncIterator[dict[str, Any]]:
         path = f"/v1/runs/{run_id}/events"
         try:

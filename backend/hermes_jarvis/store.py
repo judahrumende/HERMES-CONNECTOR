@@ -56,6 +56,15 @@ CREATE TABLE IF NOT EXISTS paired_devices (
     last_seen_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS skill_drafts (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    request TEXT NOT NULL,
+    run_id TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT NOT NULL,
     profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -117,6 +126,75 @@ CREATE TABLE IF NOT EXISTS events (
     at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_profile ON events(profile_id, id);
+
+CREATE TABLE IF NOT EXISTS messages (
+    id TEXT NOT NULL,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL DEFAULT '',
+    direction TEXT NOT NULL DEFAULT 'outgoing',
+    text TEXT NOT NULL,
+    run_id TEXT NOT NULL DEFAULT '',
+    at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_messages_agent ON messages(profile_id, agent_id, at);
+
+CREATE TABLE IF NOT EXISTS approvals (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL DEFAULT '',
+    session_id TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL DEFAULT 'run',
+    summary TEXT NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}',
+    state TEXT NOT NULL DEFAULT 'pending',
+    decided_at TEXT,
+    run_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_approvals_profile ON approvals(profile_id, state, created_at);
+
+CREATE TABLE IF NOT EXISTS tool_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id TEXT REFERENCES profiles(id) ON DELETE CASCADE,
+    run_id TEXT NOT NULL DEFAULT '',
+    agent_id TEXT NOT NULL DEFAULT '',
+    tool_name TEXT NOT NULL,
+    input TEXT NOT NULL DEFAULT '{}',
+    output TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'ok',
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_tool_events_profile ON tool_events(profile_id, id DESC);
+CREATE INDEX IF NOT EXISTS idx_tool_events_run ON tool_events(run_id, id);
+
+CREATE TABLE IF NOT EXISTS runs (
+    id TEXT PRIMARY KEY,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL DEFAULT '',
+    session_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'running',
+    input_preview TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL,
+    ended_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_runs_profile ON runs(profile_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS scheduled_directives (
+    id TEXT NOT NULL,
+    profile_id TEXT NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL DEFAULT '',
+    directive TEXT NOT NULL,
+    interval_seconds INTEGER NOT NULL DEFAULT 3600,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    last_run_at TEXT,
+    last_run_id TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (profile_id, id)
+);
+CREATE INDEX IF NOT EXISTS idx_directives_profile ON scheduled_directives(profile_id, enabled);
 """
 
 
@@ -138,11 +216,27 @@ class Store:
 
     def _migrate(self, conn: sqlite3.Connection) -> None:
         """Apply additive migrations for existing local installations."""
-        columns = {row["name"] for row in conn.execute("PRAGMA table_info(agents)").fetchall()}
-        if "output_path" not in columns:
+        agent_cols = {row["name"] for row in conn.execute("PRAGMA table_info(agents)").fetchall()}
+        if "output_path" not in agent_cols:
             conn.execute("ALTER TABLE agents ADD COLUMN output_path TEXT NOT NULL DEFAULT ''")
-        if "mirror_to_vault" not in columns:
+        if "mirror_to_vault" not in agent_cols:
             conn.execute("ALTER TABLE agents ADD COLUMN mirror_to_vault INTEGER NOT NULL DEFAULT 1")
+        if "notes" not in agent_cols:
+            conn.execute("ALTER TABLE agents ADD COLUMN notes TEXT NOT NULL DEFAULT ''")
+
+        skill_cols = {row["name"] for row in conn.execute("PRAGMA table_info(skill_sources)").fetchall()}
+        if "installed" not in skill_cols:
+            conn.execute("ALTER TABLE skill_sources ADD COLUMN installed INTEGER NOT NULL DEFAULT 0")
+        if "installed_at" not in skill_cols:
+            conn.execute("ALTER TABLE skill_sources ADD COLUMN installed_at TEXT")
+        if "version" not in skill_cols:
+            conn.execute("ALTER TABLE skill_sources ADD COLUMN version TEXT NOT NULL DEFAULT ''")
+        if "sha" not in skill_cols:
+            conn.execute("ALTER TABLE skill_sources ADD COLUMN sha TEXT NOT NULL DEFAULT ''")
+
+        approval_cols = {row["name"] for row in conn.execute("PRAGMA table_info(approvals)").fetchall()} if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='approvals'").fetchone() else set()
+        if "run_id" not in approval_cols and approval_cols:
+            conn.execute("ALTER TABLE approvals ADD COLUMN run_id TEXT NOT NULL DEFAULT ''")
 
     @contextmanager
     def _connect(self) -> Iterator[sqlite3.Connection]:
@@ -229,11 +323,27 @@ class Store:
             )
         return {"id": id, "profile_id": profile_id, "name": name, "role": role, "initials": initials, "output_path": output_path, "mirror_to_vault": mirror_to_vault, "created_at": created_at}
 
+    def get_agent_notes(self, profile_id: str, agent_id: str) -> str:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            row = conn.execute(
+                "SELECT notes FROM agents WHERE profile_id = ? AND id = ?", (profile_id, agent_id)
+            ).fetchone()
+            return row["notes"] if row else ""
+
+    def set_agent_notes(self, profile_id: str, agent_id: str, notes: str) -> None:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "UPDATE agents SET notes = ? WHERE profile_id = ? AND id = ?",
+                (notes, profile_id, agent_id),
+            )
+
     def agent_loop_candidates(self) -> list[dict[str, Any]]:
         """Return enabled loops. The scheduler, not this storage method, owns timing."""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT l.*, a.name, a.role, a.output_path, a.mirror_to_vault, p.name AS profile_name, p.context, p.vault_path "
+                "SELECT l.*, a.name, a.role, a.output_path, a.mirror_to_vault, a.notes, p.name AS profile_name, p.context, p.vault_path "
                 "FROM agent_loops l JOIN agents a ON a.profile_id = l.profile_id AND a.id = l.agent_id "
                 "JOIN profiles p ON p.id = l.profile_id WHERE l.enabled = 1"
             ).fetchall()
@@ -277,10 +387,42 @@ class Store:
             self._require_profile(conn, profile_id)
             self._ensure_default_skills(conn, profile_id)
             rows = conn.execute(
-                "SELECT id, name, repository, description, is_default, created_at FROM skill_sources WHERE profile_id = ? ORDER BY is_default DESC, created_at",
+                "SELECT id, name, repository, description, is_default, installed, installed_at, version, sha, created_at FROM skill_sources WHERE profile_id = ? ORDER BY is_default DESC, created_at",
                 (profile_id,),
             ).fetchall()
-            return [{**dict(row), "default": bool(row["is_default"]), "status": "source"} for row in rows]
+            return [{**dict(row), "default": bool(row["is_default"]), "status": "installed" if row["installed"] else "source"} for row in rows]
+
+    def match_skills(self, profile_id: str, request: str, limit: int = 6) -> list[dict[str, Any]]:
+        """Rank profile skill sources using transparent token overlap, never hidden capability claims."""
+        query = {part.lower() for part in request.split() if len(part) >= 3}
+        skills = self.list_skills(profile_id)
+        scored: list[tuple[int, dict[str, Any]]] = []
+        for skill in skills:
+            text = f"{skill['name']} {skill['description']} {skill['repository']}".lower()
+            score = sum(1 for token in query if token in text)
+            if score:
+                scored.append((score, skill))
+        return [skill for _, skill in sorted(scored, key=lambda row: (-row[0], row[1]["name"]))[:limit]]
+
+    def create_skill_draft(self, profile_id: str, agent_id: str, request: str, run_id: str = "") -> dict[str, Any]:
+        created_at = now()
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            exists = conn.execute("SELECT 1 FROM agents WHERE profile_id = ? AND id = ?", (profile_id, agent_id)).fetchone()
+            if exists is None:
+                raise LookupError(agent_id)
+            draft_id = f"draft-{created_at}-{agent_id}".replace(":", "-")
+            conn.execute("INSERT INTO skill_drafts (id, profile_id, agent_id, request, run_id, created_at) VALUES (?, ?, ?, ?, ?, ?)", (draft_id, profile_id, agent_id, request, run_id or None, created_at))
+            return {"id": draft_id, "profile_id": profile_id, "agent_id": agent_id, "request": request, "run_id": run_id or None, "created_at": created_at, "status": "requested"}
+
+    def list_agent_loops(self, profile_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            rows = conn.execute(
+                "SELECT l.*, a.name, a.role, a.initials FROM agent_loops l JOIN agents a ON a.profile_id = l.profile_id AND a.id = l.agent_id WHERE l.profile_id = ? ORDER BY a.created_at",
+                (profile_id,),
+            ).fetchall()
+            return [{**dict(row), "enabled": bool(row["enabled"])} for row in rows]
 
     def create_skill(self, profile_id: str, id: str, name: str, repository: str, description: str) -> dict[str, Any]:
         created_at = now()
@@ -417,6 +559,312 @@ class Store:
                 (profile_id, limit),
             ).fetchall()
             return [{"type": row["type"], "data": json.loads(row["data"]), "at": row["at"]} for row in rows]
+
+    # -- skill install state -------------------------------------------------------
+    def install_skill(self, profile_id: str, skill_id: str, version: str = "", sha: str = "") -> dict[str, Any]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "UPDATE skill_sources SET installed = 1, installed_at = ?, version = ?, sha = ? WHERE profile_id = ? AND id = ?",
+                (now(), version, sha, profile_id, skill_id),
+            )
+            row = conn.execute("SELECT * FROM skill_sources WHERE profile_id = ? AND id = ?", (profile_id, skill_id)).fetchone()
+            if row is None:
+                raise LookupError(skill_id)
+            return {**dict(row), "default": bool(row["is_default"]), "status": "installed" if row["installed"] else "source"}
+
+    def uninstall_skill(self, profile_id: str, skill_id: str) -> None:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "UPDATE skill_sources SET installed = 0, installed_at = NULL WHERE profile_id = ? AND id = ?",
+                (profile_id, skill_id),
+            )
+
+    # -- messages -----------------------------------------------------------------
+    def save_message(self, profile_id: str, id: str, agent_id: str, direction: str, text: str, run_id: str = "") -> dict[str, Any]:
+        at = now()
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "INSERT INTO messages (id, profile_id, agent_id, direction, text, run_id, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (id, profile_id, agent_id, direction, text, run_id, at),
+            )
+        return {"id": id, "profile_id": profile_id, "agent_id": agent_id, "direction": direction, "text": text, "run_id": run_id, "at": at}
+
+    def list_messages(self, profile_id: str, agent_id: str, limit: int = 200) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            rows = conn.execute(
+                "SELECT * FROM messages WHERE profile_id = ? AND agent_id = ? ORDER BY at LIMIT ?",
+                (profile_id, agent_id, limit),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def search_messages(self, profile_id: str, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            rows = conn.execute(
+                "SELECT * FROM messages WHERE profile_id = ? AND text LIKE ? ORDER BY at DESC LIMIT ?",
+                (profile_id, f"%{query}%", limit),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def message_previews(self, profile_id: str) -> list[dict[str, Any]]:
+        """Last message per agent for conversation list."""
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            rows = conn.execute(
+                "SELECT agent_id, text, direction, at FROM messages WHERE profile_id = ? AND id IN (SELECT id FROM messages WHERE profile_id = ? GROUP BY agent_id HAVING at = MAX(at)) ORDER BY at DESC",
+                (profile_id, profile_id),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    # -- approvals ----------------------------------------------------------------
+    def create_approval(self, profile_id: str, id: str, agent_id: str, session_id: str, kind: str, summary: str, payload: dict[str, Any]) -> dict[str, Any]:
+        created_at = now()
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "INSERT INTO approvals (id, profile_id, agent_id, session_id, kind, summary, payload, state, run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', '', ?)",
+                (id, profile_id, agent_id, session_id, kind, summary, json.dumps(payload), created_at),
+            )
+        return {"id": id, "profile_id": profile_id, "agent_id": agent_id, "session_id": session_id, "kind": kind, "summary": summary, "payload": payload, "state": "pending", "run_id": "", "decided_at": None, "created_at": created_at}
+
+    def list_approvals(self, profile_id: str, state: str | None = None) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            if state:
+                rows = conn.execute("SELECT * FROM approvals WHERE profile_id = ? AND state = ? ORDER BY created_at DESC", (profile_id, state)).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM approvals WHERE profile_id = ? ORDER BY created_at DESC", (profile_id,)).fetchall()
+            result = []
+            for row in rows:
+                item = dict(row)
+                try:
+                    item["payload"] = json.loads(item["payload"])
+                except (ValueError, TypeError):
+                    item["payload"] = {}
+                result.append(item)
+            return result
+
+    def decide_approval(self, profile_id: str, approval_id: str, state: str, run_id: str = "") -> dict[str, Any]:
+        if state not in ("approved", "denied"):
+            raise ValueError("state must be 'approved' or 'denied'")
+        decided_at = now()
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            cursor = conn.execute(
+                "UPDATE approvals SET state = ?, decided_at = ?, run_id = ? WHERE id = ? AND profile_id = ?",
+                (state, decided_at, run_id, approval_id, profile_id),
+            )
+            if cursor.rowcount == 0:
+                raise LookupError(approval_id)
+            row = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
+            item = dict(row)
+            try:
+                item["payload"] = json.loads(item["payload"])
+            except (ValueError, TypeError):
+                item["payload"] = {}
+            return item
+
+    def get_approval(self, profile_id: str, approval_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            row = conn.execute("SELECT * FROM approvals WHERE id = ? AND profile_id = ?", (approval_id, profile_id)).fetchone()
+            if row is None:
+                raise LookupError(approval_id)
+            item = dict(row)
+            try:
+                item["payload"] = json.loads(item["payload"])
+            except (ValueError, TypeError):
+                item["payload"] = {}
+            return item
+
+    # -- tool events --------------------------------------------------------------
+    def record_tool_event(self, profile_id: str | None, run_id: str, agent_id: str, tool_name: str, input_data: dict[str, Any], output_data: dict[str, Any], status: str = "ok", duration_ms: int = 0) -> None:
+        at = now()
+        with self._connect() as conn:
+            if profile_id:
+                self._require_profile(conn, profile_id)
+            conn.execute(
+                "INSERT INTO tool_events (profile_id, run_id, agent_id, tool_name, input, output, status, duration_ms, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (profile_id, run_id, agent_id, tool_name, json.dumps(input_data), json.dumps(output_data), status, duration_ms, at),
+            )
+
+    def list_tool_events(self, profile_id: str, limit: int = 50, run_id: str = "") -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            if run_id:
+                rows = conn.execute("SELECT * FROM tool_events WHERE profile_id = ? AND run_id = ? ORDER BY id DESC LIMIT ?", (profile_id, run_id, limit)).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM tool_events WHERE profile_id = ? ORDER BY id DESC LIMIT ?", (profile_id, limit)).fetchall()
+            result = []
+            for row in rows:
+                item = dict(row)
+                for key in ("input", "output"):
+                    try:
+                        item[key] = json.loads(item[key])
+                    except (ValueError, TypeError):
+                        item[key] = {}
+                result.append(item)
+            return result
+
+    def db_stats(self) -> dict[str, int]:
+        """Row counts for the doctor view."""
+        tables = ("profiles", "agents", "messages", "approvals", "tool_events", "events", "tasks", "sources", "skill_sources", "runs", "scheduled_directives")
+        with self._connect() as conn:
+            return {table: (conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]) for table in tables}
+
+    # -- runs timeline ----------------------------------------------------------------
+    def save_run(self, run_id: str, profile_id: str, agent_id: str = "", session_id: str = "", input_preview: str = "") -> None:
+        at = now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO runs (id, profile_id, agent_id, session_id, status, input_preview, started_at) VALUES (?, ?, ?, ?, 'running', ?, ?)",
+                (run_id, profile_id, agent_id, session_id, input_preview[:500], at),
+            )
+
+    def finish_run(self, run_id: str, status: str = "done") -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE runs SET status = ?, ended_at = ? WHERE id = ?", (status, now(), run_id))
+
+    def list_runs(self, profile_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            rows = conn.execute(
+                "SELECT r.*, COUNT(te.id) AS tool_count FROM runs r LEFT JOIN tool_events te ON te.run_id = r.id WHERE r.profile_id = ? GROUP BY r.id ORDER BY r.started_at DESC LIMIT ?",
+                (profile_id, limit),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    # -- scheduled directives -------------------------------------------------------
+    def create_scheduled_directive(self, profile_id: str, agent_id: str, directive: str, interval_seconds: int = 3600) -> dict[str, Any]:
+        import uuid
+        directive_id = str(uuid.uuid4())
+        at = now()
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            conn.execute(
+                "INSERT INTO scheduled_directives (id, profile_id, agent_id, directive, interval_seconds, enabled, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+                (directive_id, profile_id, agent_id, directive, max(60, interval_seconds), at),
+            )
+        return {"id": directive_id, "profile_id": profile_id, "agent_id": agent_id, "directive": directive, "interval_seconds": interval_seconds, "enabled": True, "last_run_at": None, "last_run_id": None, "last_error": None, "created_at": at}
+
+    def list_scheduled_directives(self, profile_id: str) -> list[dict[str, Any]]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            rows = conn.execute("SELECT * FROM scheduled_directives WHERE profile_id = ? ORDER BY created_at DESC", (profile_id,)).fetchall()
+            return [dict(row) for row in rows]
+
+    def update_scheduled_directive(self, profile_id: str, directive_id: str, **kwargs: Any) -> dict[str, Any] | None:
+        allowed = {"directive", "agent_id", "interval_seconds", "enabled"}
+        updates = {k: v for k, v in kwargs.items() if k in allowed}
+        if not updates:
+            return None
+        sets = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [profile_id, directive_id]
+        with self._connect() as conn:
+            conn.execute(f"UPDATE scheduled_directives SET {sets} WHERE profile_id = ? AND id = ?", values)
+            row = conn.execute("SELECT * FROM scheduled_directives WHERE profile_id = ? AND id = ?", (profile_id, directive_id)).fetchone()
+            return dict(row) if row else None
+
+    def delete_scheduled_directive(self, profile_id: str, directive_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM scheduled_directives WHERE profile_id = ? AND id = ?", (profile_id, directive_id))
+
+    def due_scheduled_directives(self) -> list[dict[str, Any]]:
+        """Returns enabled directives whose last_run_at is older than interval_seconds (or never run)."""
+        at = now()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT sd.*, p.name AS profile_name, p.context, p.vault_path, a.name AS agent_name, a.role AS agent_role FROM scheduled_directives sd JOIN profiles p ON p.id = sd.profile_id LEFT JOIN agents a ON a.profile_id = sd.profile_id AND a.id = sd.agent_id WHERE sd.enabled = 1 AND (sd.last_run_at IS NULL OR datetime(sd.last_run_at, '+' || sd.interval_seconds || ' seconds') <= datetime(?))",
+                (at,),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
+    def mark_directive_run(self, profile_id: str, directive_id: str, run_id: str = "", error: str | None = None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE scheduled_directives SET last_run_at = ?, last_run_id = ?, last_error = ? WHERE profile_id = ? AND id = ?",
+                (now(), run_id or None, error, profile_id, directive_id),
+            )
+
+    # -- profile export / import ----------------------------------------------------
+    def export_profile(self, profile_id: str) -> dict[str, Any]:
+        with self._connect() as conn:
+            self._require_profile(conn, profile_id)
+            profile = dict(conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone())
+            agents = [dict(r) for r in conn.execute("SELECT * FROM agents WHERE profile_id = ?", (profile_id,)).fetchall()]
+            tasks = [dict(r) for r in conn.execute("SELECT * FROM tasks WHERE profile_id = ?", (profile_id,)).fetchall()]
+            sources = [dict(r) for r in conn.execute("SELECT * FROM sources WHERE profile_id = ?", (profile_id,)).fetchall()]
+            skills = [dict(r) for r in conn.execute("SELECT * FROM skill_sources WHERE profile_id = ?", (profile_id,)).fetchall()]
+            policy_row = conn.execute("SELECT * FROM policy WHERE profile_id = ?", (profile_id,)).fetchone()
+            policy = dict(policy_row) if policy_row else {}
+            routes = [dict(r) for r in conn.execute("SELECT * FROM model_routes WHERE profile_id = ?", (profile_id,)).fetchall()]
+            directives = [dict(r) for r in conn.execute("SELECT * FROM scheduled_directives WHERE profile_id = ?", (profile_id,)).fetchall()]
+        return {"schema_version": 1, "profile": profile, "agents": agents, "tasks": tasks, "sources": sources, "skills": skills, "policy": policy, "routes": routes, "directives": directives, "exported_at": now()}
+
+    def import_profile(self, data: dict[str, Any]) -> dict[str, Any]:
+        import uuid
+        profile_data = data.get("profile", {})
+        new_id = str(uuid.uuid4())
+        at = now()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO profiles (id, name, kind, context, vault_path, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (new_id, profile_data.get("name", "Imported profile"), profile_data.get("kind", ""), profile_data.get("context", ""), profile_data.get("vault_path", ""), at),
+            )
+            for agent in data.get("agents", []):
+                agent_id = str(uuid.uuid4())
+                conn.execute("INSERT INTO agents (id, profile_id, name, role, initials, output_path, mirror_to_vault, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (agent_id, new_id, agent.get("name", "Agent"), agent.get("role", ""), agent.get("initials", ""), agent.get("output_path", ""), agent.get("mirror_to_vault", 1), at))
+            for task in data.get("tasks", []):
+                conn.execute("INSERT INTO tasks (id, profile_id, title, area, state, created_at) VALUES (?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), new_id, task.get("title", ""), task.get("area", ""), task.get("state", "draft"), at))
+            for source in data.get("sources", []):
+                conn.execute("INSERT INTO sources (id, profile_id, title, detail, created_at) VALUES (?, ?, ?, ?, ?)", (str(uuid.uuid4()), new_id, source.get("title", ""), source.get("detail", ""), at))
+            for skill in data.get("skills", []):
+                try:
+                    conn.execute("INSERT INTO skill_sources (id, profile_id, name, repository, description, is_default, installed, installed_at, version, sha, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (str(uuid.uuid4()), new_id, skill.get("name", ""), skill.get("repository", ""), skill.get("description", ""), 0, 0, None, "", "", at))
+                except Exception:
+                    pass
+            for route in data.get("routes", []):
+                conn.execute("INSERT OR IGNORE INTO model_routes (profile_id, agent_id, provider, model) VALUES (?, ?, ?, ?)", (new_id, route.get("agent_id", ""), route.get("provider", ""), route.get("model", "")))
+            policy = data.get("policy", {})
+            conn.execute("INSERT OR IGNORE INTO policy (profile_id, autonomy) VALUES (?, ?)", (new_id, policy.get("autonomy", "manual")))
+            for directive in data.get("directives", []):
+                conn.execute("INSERT INTO scheduled_directives (id, profile_id, agent_id, directive, interval_seconds, enabled, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)", (str(uuid.uuid4()), new_id, directive.get("agent_id", ""), directive.get("directive", ""), directive.get("interval_seconds", 3600), at))
+        return {"id": new_id, "name": profile_data.get("name", "Imported profile")}
+
+    # -- vault diff -----------------------------------------------------------------
+    def vault_diff(self, vault_path: str, since_iso: str | None = None) -> list[dict[str, Any]]:
+        import os
+        import stat
+        from pathlib import Path as FsPath
+        vault = FsPath(vault_path)
+        if not vault.is_dir():
+            return []
+        cutoff = 0.0
+        if since_iso:
+            from datetime import datetime, timezone
+            try:
+                cutoff = datetime.fromisoformat(since_iso.replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                cutoff = 0.0
+        changed = []
+        for root, _, files in os.walk(vault):
+            for fname in files:
+                if fname.startswith("."):
+                    continue
+                fp = FsPath(root) / fname
+                try:
+                    mtime = fp.stat().st_mtime
+                    if mtime > cutoff:
+                        rel = str(fp.relative_to(vault))
+                        changed.append({"path": rel, "modified_at": datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z"), "size": fp.stat().st_size})
+                except OSError:
+                    pass
+        changed.sort(key=lambda x: x["modified_at"], reverse=True)
+        return changed[:200]
 
     # -- global federated view (explicit provenance, read-only) ----------------------
     def global_context(self) -> list[dict[str, Any]]:

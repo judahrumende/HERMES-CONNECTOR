@@ -101,6 +101,18 @@ class HermesService:
         await self.refresh()
         return job
 
+    async def stop_run(self, run_id: str) -> dict[str, Any]:
+        client = self.client()
+        try:
+            result = await client.stop_run(run_id)
+        finally:
+            await client.close()
+        task = self.tasks.pop(run_id, None)
+        if task:
+            task.cancel()
+        await self.hub.publish("run.stopped", {"run_id": run_id})
+        return result
+
     async def forward(self, run_id: str) -> None:
         client = self.client()
         try:

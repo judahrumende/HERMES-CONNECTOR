@@ -129,3 +129,18 @@ def test_paired_device_secret_is_hashed_and_manifest_has_no_secret(store: Store)
     assert store.verify_paired_device("wrong-secret") is False
     manifest = store.mobile_manifest()
     assert manifest == [{"id": "a", "name": "A", "kind": "", "context": "Private context", "agents": [{"id": "ceo", "name": "CEO", "role": "Operations", "initials": "CE"}]}]
+
+
+def test_skill_matching_and_drafts_stay_profile_scoped(store: Store) -> None:
+    store.create_profile("a", "A", "", "", "")
+    store.create_profile("b", "B", "", "", "")
+    store.create_agent("a", "ceo", "CEO", "Operations", "CE")
+    store.create_skill("a", "github", "GitHub review", "https://github.com/example/github-review", "Review pull requests and repository changes")
+
+    matches = store.match_skills("a", "Review the current pull request")
+    assert [match["id"] for match in matches] == ["github"]
+    assert store.match_skills("b", "Review the current pull request") == []
+
+    draft = store.create_skill_draft("a", "ceo", "Create a release-review skill", "run-1")
+    assert draft["status"] == "requested"
+    assert draft["run_id"] == "run-1"
