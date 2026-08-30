@@ -10,6 +10,7 @@ import {
 import './linear.css';
 import './branding.css';
 import FinishedApp from './finished-app';
+import './orbital-archive.css';
 
 type View = 'overview' | 'messages' | 'work' | 'agents' | 'knowledge' | 'approvals' | 'settings';
 type Status = 'live' | 'idle' | 'blocked' | 'draft';
@@ -57,14 +58,15 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
     <div className="landing">
       <header className="site-nav">
         <Brand />
-        <nav aria-label="Primary navigation"><a href="#system">System</a><a href="#architecture">Architecture</a><a href="#control">Human control</a></nav>
+        <nav aria-label="Primary navigation"><a href="#system">System</a><a href="#profiles">Profiles</a><a href="#agents">Agents</a><a href="#control">Human control</a></nav>
         <button className="button button-primary" onClick={onEnter}>Open command centre <ArrowRight size={14} /></button>
       </header>
       <main>
         <section className="hero">
           <div className="hero-copy">
-            <h1>The operating system for an autonomous AI organisation.</h1>
-            <p>Persistent agents, visible work, and human authority—assembled into one command centre.</p>
+            <span className="archive-side-script" aria-hidden="true">ORBITAL ARCHIVE · PERTH</span>
+            <h1>An operating system for autonomous work.</h1>
+            <p>Profiles preserve context. A CEO directs specialised agents. You retain authority over the organisation from one command centre.</p>
             <div className="hero-actions"><button className="button button-secondary" onClick={onEnter}>Explore the interface <ArrowRight size={14} /></button><a href={desktopDownload} className="text-link">Download for Mac <ArrowRight size={14} /></a><a href="#system" className="text-link">See the system <ChevronDown size={14} /></a></div>
             <div className="landing-install" aria-label="Install OrbityLabs">
               <div className="landing-install-heading"><span className="mono">QUICK CONNECT</span><span>Run this in Terminal</span></div>
@@ -72,24 +74,42 @@ function LandingPage({ onEnter }: { onEnter: () => void }) {
               <a className="landing-download" href={desktopDownload}><span><strong>OrbityLabs for Mac</strong><small>Apple Silicon · DMG installer</small></span><ArrowRight size={17} /></a>
             </div>
           </div>
-          <div className="hero-stage" id="system"><ProductScene /></div>
+          <figure className="archive-hero-art"><img src="/assets/orbital-archive/hero-metropolis.jpg" alt="Illustrated orbital metropolis with specialised districts connected to a central coordination tower" /><figcaption>OrbityLabs organisation map · illustrative system metaphor</figcaption></figure>
+          <div className="archive-hero-stamp" aria-hidden="true"><span>OL</span><small>ORBITAL<br />ARCHIVE</small></div>
         </section>
 
-        <section className="statement-section" id="architecture">
-          <h2><strong>One organisation, not a collection of chats.</strong> Durable roles, shared context, directed work, and explicit escalation form a system that can keep operating beyond one browser window.</h2>
-          <div className="architecture-grid">
-            <ArchitectureFigure type="profiles" title="Persistent profiles" text="Specialised roles retain identity and responsibility across sessions once Hermes is connected." />
-            <ArchitectureFigure type="work" title="Directed work" text="Objectives move through visible queues, owners, dependencies, and review boundaries." />
-            <ArchitectureFigure type="authority" title="Human authority" text="Approvals and high-impact actions return to an operator with the context needed to decide." />
-          </div>
+        <section className="archive-system" id="system">
+          <div className="archive-system-copy"><h2>One organisation.<br />Every route visible.</h2><p>OrbityLabs separates the work into durable profiles, agents, tools, knowledge, and decisions—then gives the CEO enough context to coordinate the whole system without collapsing it into one chat.</p><button className="archive-arrow-link" onClick={onEnter}>Enter the command centre <ArrowRight size={15} /></button></div>
+          <div className="archive-product-frame"><ProductScene /></div>
         </section>
 
-        <section className="control-section" id="control">
-          <div className="control-copy"><h2>Complex work should remain legible.</h2><p>OrbityLabs is designed to show the organisation as it is: what is connected, what is waiting, where work sits, and which decisions still belong to a person.</p><button className="button button-outline" onClick={onEnter}>Inspect the command centre <ArrowRight size={14} /></button></div>
+        <section className="archive-orchestration">
+          <div className="archive-dark-copy"><h2>The CEO keeps the organisation in motion.</h2><p>Direct one outcome. The CEO can break it into work, select agents, preserve profile context, and return decisions that still require you.</p><dl><div><dt>Direction</dt><dd>One outcome and its constraints</dd></div><div><dt>Coordination</dt><dd>Profile-scoped agents and tools</dd></div><div><dt>Evidence</dt><dd>Observed runs, events, and approvals</dd></div></dl></div>
+          <figure><img src="/assets/orbital-archive/orchestration-tower.jpg" alt="Architectural cross-section of a central coordination tower connected to specialised agent studios" /><figcaption>Coordination model · illustrative</figcaption></figure>
+        </section>
+
+        <section className="archive-agents" id="agents">
+          <header><h2>Specialists with a place in the system.</h2><p>Each agent belongs to a profile, keeps its own provider and skills, and remains visibly unavailable until its runtime is actually configured.</p></header>
+          <figure className="archive-agent-portraits"><img src="/assets/orbital-archive/agent-triptych.jpg" alt="Three illustrated specialist agent portraits: strategy, systems, and research" /></figure>
+          <div className="archive-agent-labels"><article><h3>Strategy</h3><p>Coordinates outcomes, constraints, and responsibility.</p></article><article><h3>Systems</h3><p>Builds and operates the tools assigned to its context.</p></article><article><h3>Research</h3><p>Maintains evidence, sources, and profile knowledge.</p></article></div>
+        </section>
+
+        <section className="archive-profiles" id="profiles">
+          <figure><img src="/assets/orbital-archive/profile-atlas.jpg" alt="Illustrated atlas of isolated profile worlds connected through an overview observatory" /><figcaption>Profile atlas · contexts remain isolated</figcaption></figure>
+          <div><h2>Different worlds.<br />One clear view.</h2><p>Your business, a product, or a research project can each have separate files, agents, skills, and vaults. The overview chatbot can answer across profiles without silently merging their working context.</p><div className="archive-profile-list"><span>Business profile</span><span>Product profile</span><span>Research profile</span><span>Global overview</span></div></div>
+        </section>
+
+        <section className="archive-control" id="control">
+          <div><h2>Autonomy should stay legible.</h2><p>OrbityLabs distinguishes what is configured, what has been observed, what is waiting, and what still belongs to you. Automatic approval can be enabled as an explicit operating policy—not as a hidden claim.</p><button className="button button-outline" onClick={onEnter}>Inspect the operating surface <ArrowRight size={14} /></button></div>
           <WorkflowPreview />
         </section>
+
+        <section className="archive-access">
+          <div><h2>Build the organisation on your laptop.</h2><p>Start with the desktop command centre, then connect the services and models you actually use.</p></div>
+          <div className="archive-access-actions"><button className="button button-primary" onClick={onEnter}>Open command centre <ArrowRight size={14} /></button><a href={desktopDownload}>Download for Mac <ArrowRight size={14} /></a></div>
+        </section>
       </main>
-      <footer className="site-footer"><Brand /><span>Autonomous work, made legible.</span><span className="mono">Connect: npx orbitylabs-connect http://127.0.0.1:8642</span><a className="mono" href={desktopDownload}>Download desktop · macOS arm64</a></footer>
+      <footer className="site-footer"><Brand /><span>Autonomous work, made legible.</span><span className="mono">PERTH · WESTERN AUSTRALIA</span><a className="mono" href={desktopDownload}>Download desktop · macOS arm64</a></footer>
     </div>
   );
 }

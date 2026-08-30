@@ -1,69 +1,81 @@
 ---
-name: OrbityLabs Ground Track
-description: A route-based command surface for evidence-led AI operations.
+name: OrbityLabs Orbital Archive
+description: A tactile editorial future for an evidence-led autonomous organisation.
 colors:
-  void: "#090a0c"
-  plane: "#0e1013"
-  raised-plane: "#13161a"
-  rule: "#252930"
-  text: "#f3f5f6"
-  body: "#b2b7be"
-  muted: "#747b85"
-  verified: "#68d391"
-  attention: "#e5b96b"
-  blocked: "#f07b74"
+  paper: "#efe0bb"
+  paper-light: "#f7ebcb"
+  ink: "#17201d"
+  orange: "#ce5526"
+  ochre: "#d89735"
+  brass: "#9b722e"
+  muted: "#6f674f"
+  verified: "#74b97a"
+  blocked: "#dc6b50"
 typography:
-  display: "DM Sans, system-ui, sans-serif; 68px/0.99; -0.067em"
-  page: "DM Sans, system-ui, sans-serif; 32px/1.08; -0.055em"
-  section: "DM Sans, system-ui, sans-serif; 19px/1.2; -0.04em"
-  interface: "DM Sans, system-ui, sans-serif; 12px/1.4"
-  metadata: "JetBrains Mono, ui-monospace, monospace; 10px/1.4"
+  display: "Bodoni Moda, Georgia, serif"
+  interface: "DM Sans, system-ui, sans-serif"
+  metadata: "JetBrains Mono, ui-monospace, monospace"
+rounded:
+  interface: "0-6px"
+  status: "9999px"
 ---
 
-# Design System: OrbityLabs Ground Track
+# Design System: OrbityLabs Orbital Archive
 
 ## North star
 
-**Ground Track** makes OrbityLabs feel like a precise laptop control room rather than a collection of dashboard cards. An operator sets intent; a route reveals what is configured, observed, and still unavailable. The system is dark, sparse, and dense where it needs to be. It treats evidence as the visual centre of gravity.
+**Orbital Archive** imagines the autonomous organisation as a hand-drawn future institution: part observatory, part archive, part transit system. Warm fibrous paper, carbon ink, oxidised orange, astronomical geometry, and architectural illustration give the product a tactile cultural home without making the operational interface harder to use.
 
-The product UI and landing page share this language. A paired phone is deliberately different: it is a simple, light remote conversation surface, never a compressed desktop dashboard.
+The expressive landing experience and the laptop command centre share one world at different intensities. Marketing uses full illustration, editorial scale, and cinematic sequence. The app uses paper as a rare inspection surface, orange as route emphasis, and archival texture as atmosphere around dense operational data. The paired mobile companion remains a simple conversation surface.
 
-## Visual rules
+## Image system
 
-- Use near-black graphite planes, single-pixel rules, and low-radius rectangles for hierarchy.
-- Put the primary route near the top of an operational screen. It connects real stages such as runtime, leadership, and observed activity.
-- Use orbital geometry only as a meaningful ground-track motif around profile or run relationships. Never add a decorative grid, glowing widget, or fake terminal stream.
-- The light primary action is reserved for an operator action such as setting a directive. All other controls are dark and outlined.
-- Green means verified or observed. Amber and red are only for real attention or blocked states. Unconfigured and unknown state remains neutral and explicit.
-- Mobile paired mode switches to a quiet white chat experience. It omits the sidebar, profile administration, surveillance, and desktop controls.
+All flagship artwork is original GPT Images output saved under `public/assets/orbital-archive/`. It must not contain interface text, commercial claims, logos, or synthetic runtime data. Live HTML carries every product statement and interaction.
+
+- `hero-metropolis.jpg`: the autonomous organisation as a connected future metropolis.
+- `orchestration-tower.jpg`: the CEO and agent system as an architectural cross-section.
+- `agent-triptych.jpg`: strategy, systems, and research as three editorial portraits.
+- `profile-atlas.jpg`: isolated profile worlds connected through an overview observatory.
+- `paper-texture.jpg`: the shared material substrate.
+
+Images use fibrous paper, ink bleed, risograph grain, technical construction lines, solar discs, ivory, ochre, carbon, and vermilion. They avoid cyberpunk neon, generic neural-network graphics, photorealism, copied cities, and embedded text.
 
 ## Typography
 
-DM Sans is used for all readable UI, with large negative-tracked display type for the operating thesis and compact, clear data rows below it. JetBrains Mono is only for identifiers, timestamps, commands, and runtime metadata.
+Bodoni Moda is the editorial display voice. It is used for major landing statements and selected command-centre headings. DM Sans carries interface copy and controls. JetBrains Mono remains limited to commands, identifiers, timestamps, and measured machine state.
 
-- Display: 48–68px, 600 weight, tight tracking.
-- Page title: 32px, 600 weight.
-- Section title: 19–21px, 600 weight.
-- UI body: 12–15px, 400–650 weight.
-- Metadata: 9–10px mono, uppercase only for labels where it clarifies hierarchy.
+- Hero display: 64–118px, regular, line-height .86–.94, tracking no tighter than -0.04em.
+- Section display: 44–88px, regular, line-height .92–1.02.
+- Body: 14–18px with 1.55–1.65 line-height and a 65–75 character measure.
+- Interface: 10–13px, medium when an action needs emphasis.
 
-## Layout
+## Layout and sequence
 
-Desktop has a persistent 258px route rail, a 66px app top bar, and a fluid working canvas. The Ground Track overview uses a single mission route above a two-column evidence layout, then a profile-scoped roster. It should not use a repeated metric-card grid.
+The landing page reads like a long-form exhibition publication:
 
-Operational panels use 6px radius at most. Adjacent dark planes and hairline rules provide depth before any shadow. Rows are interactive where they open a real location in the product.
+1. An illustrated metropolis and live product thesis.
+2. The real product interface framed as operational evidence.
+3. CEO orchestration shown as architecture.
+4. A three-part specialist portrait sequence.
+5. A profile atlas demonstrating context isolation.
+6. Human authority on a committed vermilion field.
+7. A direct desktop call to action.
 
-## Component behaviour
+Sections meet at hard editorial seams. Panels use rules and material contrast rather than generic floating cards. Illustration crops remain art-directed at every breakpoint.
 
-- **Route point:** is a button that opens the real related surface. It states one actual detail and a verified/neutral visual state.
-- **Evidence rail:** lists only recorded runtime events. When none exist, it tells the user why and provides the appropriate route to setup or monitoring.
-- **Command agent:** opens the selected CEO conversation or routes to agent creation. It never claims the agent is working unless runtime evidence exists.
-- **Roster:** is profile-scoped and opens each agent’s real conversation.
-- **Status:** is expressed with a small dot plus readable text, never colour alone.
-- **Buttons/inputs:** meet visible-focus requirements and preserve the normal interaction state; animations are limited to control transitions and a subtle ground-track drift, and are disabled for reduced-motion users.
+## Operational adaptation
 
-## Do and do not
+The app stays scan-first. Carbon planes, hairline brass rules, legible tables, and explicit status language remain primary. Parchment appears only where it improves orientation: the command-agent surface, selected navigation, inspection panels, and illustrated empty states. Green means observed or verified. Red means actually blocked. Unknown and unconfigured states remain neutral.
 
-Do show the user what has been configured, saved, discovered, or observed. Do make unavailable integrations visible. Do preserve profile isolation in every label, list, and action.
+## Motion
 
-Do not manufacture timelines, agent screens, run completions, live activity, or numeric performance. Do not use gradient-heavy AI aesthetics, excessive rounded cards, or decoration that obscures work. Do not turn the mobile remote into a tiny command centre.
+The authored moment is the hero image revealing from the right as its city slowly breathes forward. Supporting illustrations gain a restrained scale response on hover. The archive seal rotates slowly. Every effect is removed for reduced-motion users.
+
+## Rules
+
+- Keep live text out of generated images.
+- Do not fabricate agents, activity, metrics, integrations, or run success to fill the composition.
+- Use illustration as product metaphor, never as evidence of a connected runtime.
+- Preserve obvious keyboard focus, readable contrast, themed selection, scrollbars, disabled states, and truthful empty states.
+- Do not introduce neon, glassmorphism, generic AI gradients, dashboard metric-card grids, or decorative terminal streams.
+- Do not flatten the paired phone experience into a miniature desktop command centre.

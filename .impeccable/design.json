@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-08-25T11:50:00+08:00",
-  "title": "Design System: OrbityLabs Ground Track",
+  "title": "Design System: OrbityLabs Orbital Archive",
   "extensions": {
     "colorMeta": {
       "void": { "role": "neutral", "displayName": "Void", "canonical": "#08090a", "tonalRamp": ["#08090a", "#151719", "#25282b", "#3b3f44", "#5b6067", "#858b94", "#bec3ca", "#f1f2f3"] },
@@ -79,16 +79,16 @@
     }
   ],
   "narrative": {
-    "northStar": "Ground Track",
-    "overview": "OrbityLabs uses a route-based command surface for evidence-led AI operations. Hierarchy comes from graphite planes, route stages, hairline divisions, an evidence rail, and deliberate operational typography rather than dashboard-card repetition.",
-    "keyCharacteristics": ["A profile-scoped route from runtime to leadership to observed activity.", "Near-black graphite planes with concise white primary actions.", "Inter for interface hierarchy and mono only for machine metadata.", "Explicit verified, unavailable, empty, and local-only states."],
+    "northStar": "Orbital Archive",
+    "overview": "OrbityLabs is a tactile editorial future for an evidence-led autonomous organisation. The landing experience uses warm archival paper, carbon ink, vermilion routes, and original architectural illustration; the app applies the same world with restrained operational density.",
+    "keyCharacteristics": ["Original GPT Images artwork with live HTML carrying all product language.", "Warm fibrous paper, carbon planes, oxidised orange, and astronomical geometry.", "Bodoni Moda for editorial display, DM Sans for interface copy, and mono only for machine metadata.", "Explicit verified, unavailable, empty, and local-only states."],
     "rules": [
-      { "name": "The One Signal Rule", "body": "Use one light filled operator action per screen; all other controls remain graphite.", "section": "colors" },
+      { "name": "The Material Rule", "body": "Paper and illustration carry narrative surfaces; dense operational surfaces remain carbon and scan-first.", "section": "colors" },
       { "name": "The Truthful State Rule", "body": "Operational status colors describe verified state only. Unconfigured systems remain neutral and explicitly labeled.", "section": "colors" },
-      { "name": "The Route Rule", "body": "Use visible stages to orient a profile around runtime truth, leadership, and observed activity.", "section": "layout" },
+      { "name": "The Illustration Truth Rule", "body": "Generated artwork is product metaphor, never evidence of runtime activity or integration state.", "section": "imagery" },
       { "name": "The Tonal Depth Rule", "body": "Establish hierarchy with neighboring surface tones and one-pixel borders before adding any shadow.", "section": "elevation" }
     ],
-    "dos": ["Do show real route stages and evidence rather than synthetic metrics.", "Do render product UI as the landing page's proof of capability.", "Do keep disconnected systems visibly offline, unconfigured, or local-only.", "Do use Lucide line icons at a consistent 12-17px scale in dense controls."],
-    "donts": ["Don't repeat dashboard metric cards when a route or evidence list is clearer.", "Don't use decorative grids, fake terminals, or ambient activity streams.", "Don't use heavy shadows, stock imagery, decorative mono, or radii above 6px in app surfaces.", "Don't turn status colors into large solid badges or fabricate live agent activity."]
+    "dos": ["Do use original illustration to explain profiles, orchestration, and agent roles.", "Do render the real product UI as proof of capability.", "Do keep disconnected systems visibly offline, unconfigured, or local-only.", "Do art-direct every image crop at desktop and mobile widths."],
+    "donts": ["Don't put live product text or runtime claims inside generated imagery.", "Don't use generic neural networks, cyberpunk neon, glass, or decorative terminal streams.", "Don't use stock imagery, decorative mono, or radii above 6px in app surfaces.", "Don't turn status colors into large solid badges or fabricate live agent activity."]
   }
 }
